@@ -55,8 +55,26 @@ export default function LoginForm() {
     e.preventDefault();
 
     loginMutation.mutate(formData, {
-      onSuccess: () => {
-        router.push("/dashboard");
+      onSuccess: (response) => {
+        // Redirect based on user role
+        switch (response.user.role) {
+          case "ADMIN":
+            router.push("/admin");
+            break;
+          case "RESTAURANT_OWNER":
+            router.push("/dashboard");
+            break;
+          case "KITCHEN_STAFF":
+            router.push("/dashboard/kitchen");
+            break;
+          case "DRIVER":
+            router.push("/driver-portal");
+            break;
+          case "CUSTOMER":
+          default:
+            router.push("/");
+            break;
+        }
       },
     });
   };
