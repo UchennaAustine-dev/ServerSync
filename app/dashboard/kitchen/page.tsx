@@ -13,108 +13,118 @@ import {
   Package,
   ChefHat,
   Timer,
+  Volume2,
+  VolumeX,
+  Bell,
+  BellOff,
 } from "lucide-react";
-import { useState } from "react";
-
-// Mock data - will be replaced with real API calls
-const mockStats = [
-  {
-    label: "Pending Orders",
-    value: "8",
-    icon: AlertCircle,
-    trend: "Needs attention",
-    color: "text-orange-600",
-    bgColor: "bg-orange-50",
-  },
-  {
-    label: "In Preparation",
-    value: "5",
-    icon: ChefHat,
-    trend: "Currently cooking",
-    color: "text-blue-600",
-    bgColor: "bg-blue-50",
-  },
-  {
-    label: "Completed Today",
-    value: "42",
-    icon: CheckCircle2,
-    trend: "+15% from yesterday",
-    color: "text-green-600",
-    bgColor: "bg-green-50",
-  },
-  {
-    label: "Today's Revenue",
-    value: "$1,247",
-    icon: DollarSign,
-    trend: "+8% from yesterday",
-    color: "text-primary",
-    bgColor: "bg-primary/10",
-  },
-];
-
-const mockOrders = [
-  {
-    id: "ORD-1234",
-    customer: "John Doe",
-    items: [
-      { name: "Kung Pao Chicken", quantity: 2 },
-      { name: "Fried Rice", quantity: 1 },
-      { name: "Spring Rolls", quantity: 3 },
-    ],
-    status: "pending",
-    total: 45.5,
-    time: "2 min ago",
-    notes: "Extra spicy, no peanuts",
-  },
-  {
-    id: "ORD-1235",
-    customer: "Jane Smith",
-    items: [
-      { name: "Sweet & Sour Pork", quantity: 1 },
-      { name: "Egg Fried Rice", quantity: 2 },
-    ],
-    status: "pending",
-    total: 32.0,
-    time: "5 min ago",
-    notes: "",
-  },
-  {
-    id: "ORD-1236",
-    customer: "Mike Johnson",
-    items: [
-      { name: "General Tso's Chicken", quantity: 1 },
-      { name: "Wonton Soup", quantity: 1 },
-    ],
-    status: "preparing",
-    total: 28.75,
-    time: "8 min ago",
-    notes: "Deliver to room 302",
-  },
-  {
-    id: "ORD-1237",
-    customer: "Sarah Williams",
-    items: [
-      { name: "Beef Noodles", quantity: 2 },
-      { name: "Dumplings", quantity: 1 },
-    ],
-    status: "preparing",
-    total: 38.0,
-    time: "12 min ago",
-    notes: "",
-  },
-  {
-    id: "ORD-1238",
-    customer: "Tom Brown",
-    items: [{ name: "Crispy Duck", quantity: 1 }],
-    status: "ready",
-    total: 24.5,
-    time: "15 min ago",
-    notes: "",
-  },
-];
+import { useState, useEffect } from "react";
+import { useWebSocket, useKitchenNotifications } from "@/lib/websocket/hooks";
+import { useAuthStore } from "@/lib/store/auth.store";
+import { useRestaurantOrders } from "@/lib/hooks/restaurant.hooks";
+import { useUpdateOrderStatus } from "@/lib/hooks/order.hooks";
+import { showSuccessToast, showErrorToast } from "@/lib/utils/error-handler";
+import type { Order } from "@/lib/api/types/order.types";
 
 export default function KitchenDashboard() {
-  const [orders, setOrders] = useState(mockOrders);
+  // Get restaurant ID from user profile (assuming restaurant owner is logged in)
+  const user = useAuthStore((state) => state.user);
+  const restaurantId = user?.restaurantId || null; // Adjust based on your user model
+
+  // WebSocket connection
+  const { isConnected } = useWebSocket();
+
+  // Fetch orders from API
+  const {
+    data: ordersData,
+    isLoading,
+    error,
+  } = useRestaurantOrders(restaurantId || "");
+  const updateStatusMutation = useUpdateOrderStatus();
+
+  // Kitchen notifications with real-time updates
+  const {
+    newOrders,
+    notificationCount,
+    soundEnabled,
+    browserNotificationsEnabled,
+    clearNotifications,
+    removeOrder,
+    toggleSound,
+  } = useKitchenNotifications(restaurantId);
+
+  const [orders, setOrders] = useState<Order[]>([]);
+
+  // Initialize orders from API
+  useEffect(() => {
+    if (ordersData) {
+      setOrders(ordersData);
+    }
+  }, [ordersData]);
+
+  // Merge new orders from WebSocket with existing orders
+  useEffect(() => {
+    if (newOrders.length > 0) {
+      setOrders((prev) => {
+        const existingIds = new Set(prev.map((o) => o.id));
+        const uniqueNewOrders = newOrders.filter((o) => !existingIds.has(o.id));
+        return [...uniqueNewOrders, ...prev];
+      });
+    }
+  }, [newOrders]);
+
+  // Calculate stats from real orders
+  const stats = [
+    {
+      label: "Pending Orders",
+      value: orders.filter((o) => o.status === "pending").length.toString(),
+      icon: AlertCircle,
+      trend: "Needs attention",
+      color: "text-orange-600",
+      bgColor: "bg-orange-50",
+    },
+    {
+      label: "In Preparation",
+      value: orders.filter((o) => o.status === "preparing").length.toString(),
+      icon: ChefHat,
+      trend: "Currently cooking",
+      color: "text-blue-600",
+      bgColor: "bg-blue-50",
+    },
+    {
+      label: "Completed Today",
+      value: orders
+        .filter((o) => {
+          const today = new Date().toDateString();
+          return (
+            o.status === "delivered" &&
+            new Date(o.createdAt).toDateString() === today
+          );
+        })
+        .length.toString(),
+      icon: CheckCircle2,
+      trend: "Today",
+      color: "text-green-600",
+      bgColor: "bg-green-50",
+    },
+    {
+      label: "Today's Revenue",
+      value: `$${orders
+        .filter((o) => {
+          const today = new Date().toDateString();
+          return (
+            o.status === "delivered" &&
+            new Date(o.createdAt).toDateString() === today
+          );
+        })
+        .reduce((sum, o) => sum + o.total, 0)
+        .toFixed(0)}`,
+      icon: DollarSign,
+      trend: "Today",
+      color: "text-primary",
+      bgColor: "bg-primary/10",
+    },
+  ];
 
   const getStatusConfig = (status: string) => {
     switch (status) {
@@ -145,12 +155,32 @@ export default function KitchenDashboard() {
     }
   };
 
-  const updateOrderStatus = (orderId: string, newStatus: string) => {
+  const updateOrderStatus = async (orderId: string, newStatus: string) => {
+    // Update local state optimistically
     setOrders((prev) =>
       prev.map((order) =>
-        order.id === orderId ? { ...order, status: newStatus } : order,
+        order.id === orderId ? { ...order, status: newStatus as any } : order,
       ),
     );
+
+    try {
+      // Call API to update order status on backend
+      await updateStatusMutation.mutateAsync({
+        orderId,
+        data: { status: newStatus as any },
+      });
+      showSuccessToast(`Order ${orderId.slice(0, 8)} updated to ${newStatus}`);
+
+      // Remove from new orders list if it was there
+      removeOrder(orderId);
+    } catch (error) {
+      // Revert optimistic update on error
+      showErrorToast("Failed to update order status");
+      // Refetch to get correct state
+      if (ordersData) {
+        setOrders(ordersData);
+      }
+    }
   };
 
   const pendingOrders = orders.filter((o) => o.status === "pending");
@@ -168,7 +198,7 @@ export default function KitchenDashboard() {
             <h3 className="font-heading font-semibold text-lg text-secondary mb-1">
               {order.id}
             </h3>
-            <p className="text-sm text-muted-foreground">{order.customer}</p>
+            <p className="text-sm text-muted-foreground">{order.customerId}</p>
           </div>
           <Badge variant="outline" className={statusConfig.color}>
             <StatusIcon className="w-3 h-3 mr-1" />
@@ -189,19 +219,21 @@ export default function KitchenDashboard() {
           ))}
         </div>
 
-        {order.notes && (
+        {order.specialInstructions && (
           <div className="mb-4 p-3 rounded-lg bg-amber-50 border border-amber-200">
             <p className="text-xs font-medium text-amber-900 mb-1">
               Special Instructions:
             </p>
-            <p className="text-sm text-amber-800">{order.notes}</p>
+            <p className="text-sm text-amber-800">
+              {order.specialInstructions}
+            </p>
           </div>
         )}
 
         <div className="flex items-center justify-between pt-3 border-t">
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
             <Clock className="w-3 h-3" />
-            <span>{order.time}</span>
+            <span>{new Date(order.createdAt).toLocaleTimeString()}</span>
           </div>
           <div className="text-sm font-semibold text-secondary">
             ${order.total.toFixed(2)}
@@ -242,7 +274,7 @@ export default function KitchenDashboard() {
               size="sm"
               variant="outline"
               className="w-full"
-              onClick={() => updateOrderStatus(order.id, "completed")}
+              onClick={() => updateOrderStatus(order.id, "out_for_delivery")}
             >
               Mark as Picked Up
             </Button>
@@ -254,9 +286,80 @@ export default function KitchenDashboard() {
 
   return (
     <DashboardLayout>
+      {/* Real-time Connection Status & Controls */}
+      <div className="mb-6 flex items-center justify-between">
+        <div className="flex items-center gap-4">
+          {/* Connection Status */}
+          <div className="flex items-center gap-2">
+            <div
+              className={`w-2 h-2 rounded-full ${
+                isConnected ? "bg-green-500 animate-pulse" : "bg-red-500"
+              }`}
+            />
+            <span className="text-sm text-muted-foreground">
+              {isConnected ? "Live updates active" : "Connecting..."}
+            </span>
+          </div>
+
+          {/* Notification Count */}
+          {notificationCount > 0 && (
+            <Badge variant="destructive" className="animate-bounce">
+              {notificationCount} new{" "}
+              {notificationCount === 1 ? "order" : "orders"}
+            </Badge>
+          )}
+        </div>
+
+        {/* Notification Controls */}
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={toggleSound}
+            className="gap-2"
+          >
+            {soundEnabled ? (
+              <>
+                <Volume2 className="w-4 h-4" />
+                Sound On
+              </>
+            ) : (
+              <>
+                <VolumeX className="w-4 h-4" />
+                Sound Off
+              </>
+            )}
+          </Button>
+
+          <Button
+            variant="outline"
+            size="sm"
+            className="gap-2"
+            disabled={!browserNotificationsEnabled}
+          >
+            {browserNotificationsEnabled ? (
+              <>
+                <Bell className="w-4 h-4" />
+                Notifications On
+              </>
+            ) : (
+              <>
+                <BellOff className="w-4 h-4" />
+                Notifications Off
+              </>
+            )}
+          </Button>
+
+          {notificationCount > 0 && (
+            <Button variant="ghost" size="sm" onClick={clearNotifications}>
+              Clear Notifications
+            </Button>
+          )}
+        </div>
+      </div>
       {/* Stats Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-        {mockStats.map((stat) => {
+        {stats.map((stat) => {
           const Icon = stat.icon;
           return (
             <Card key={stat.label} className="p-6">

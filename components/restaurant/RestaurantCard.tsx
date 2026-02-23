@@ -2,6 +2,12 @@
 
 import { Star, Clock, MapPin } from "lucide-react";
 import Link from "next/link";
+import Image from "next/image";
+import { FavoriteButton } from "./FavoriteButton";
+import {
+  usePrefetchRestaurant,
+  usePrefetchRestaurantMenu,
+} from "@/lib/hooks/restaurant.hooks";
 
 interface RestaurantCardProps {
   id: string;
@@ -24,31 +30,53 @@ export function RestaurantCard({
   tags = ["Restaurant"],
   address = "Local area",
 }: RestaurantCardProps) {
+  const prefetchRestaurant = usePrefetchRestaurant();
+  const prefetchMenu = usePrefetchRestaurantMenu();
+
+  const handleMouseEnter = () => {
+    // Prefetch restaurant details and menu on hover for faster navigation
+    prefetchRestaurant(id);
+    prefetchMenu(id);
+  };
+
   return (
-    <Link href={`/restaurants/${id}`} className="group block">
+    <Link
+      href={`/restaurants/${id}`}
+      className="group block"
+      onMouseEnter={handleMouseEnter}
+    >
       <article className="bg-white/60 backdrop-blur-2xl rounded-[40px] border border-gray-100 overflow-hidden transition-all duration-700 hover:shadow-[0_40px_80px_-20px_rgba(0,0,0,0.15)] hover:border-primary/10 hover:-translate-y-3 active:scale-[0.98]">
         {/* Image Section */}
         <div className="relative aspect-[4/5] bg-muted overflow-hidden">
           {image ? (
-            <img
+            <Image
               src={image}
               alt={name}
-              className="w-full h-full object-cover transition-transform duration-1000 group-hover:scale-105"
+              fill
+              className="object-cover transition-transform duration-1000 group-hover:scale-105"
+              sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, (max-width: 1280px) 33vw, 25vw"
             />
           ) : (
             <div className="w-full h-full flex items-center justify-center bg-linear-to-br from-orange-50 to-rose-50">
-              <span className="text-6xl opacity-30 grayscale group-hover:grayscale-0 transition-all duration-500">🍽️</span>
+              <span className="text-6xl opacity-30 grayscale group-hover:grayscale-0 transition-all duration-500">
+                🍽️
+              </span>
             </div>
           )}
 
           {/* Luxury Overlay */}
           <div className="absolute inset-0 bg-linear-to-t from-secondary/80 via-transparent to-transparent opacity-60 group-hover:opacity-100 transition-opacity duration-700" />
-          
+
+          {/* Favorite Button */}
+          <FavoriteButton restaurantId={id} variant="card" />
+
           {/* Rating badge */}
           <div className="absolute top-6 right-6">
             <div className="flex items-center gap-1.5 px-4 py-2 rounded-2xl bg-white shadow-2xl ring-1 ring-black/5">
               <Star className="w-4 h-4 fill-primary text-primary" />
-              <span className="text-sm font-black text-secondary tracking-tighter">{rating}</span>
+              <span className="text-sm font-black text-secondary tracking-tighter">
+                {rating}
+              </span>
             </div>
           </div>
 
@@ -68,7 +96,9 @@ export function RestaurantCard({
                 ))}
               </div>
               <span className="w-1 h-1 rounded-full bg-white/40" />
-              <span className="text-[10px] font-black uppercase tracking-[0.2em] text-white/80">{deliveryTime}</span>
+              <span className="text-[10px] font-black uppercase tracking-[0.2em] text-white/80">
+                {deliveryTime}
+              </span>
             </div>
           </div>
         </div>

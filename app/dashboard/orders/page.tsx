@@ -6,121 +6,77 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
   Clock,
-  MapPin,
   Star,
   Package,
   CheckCircle,
   XCircle,
   TrendingUp,
-  Filter,
   Search,
+  Loader2,
+  AlertCircle,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import Link from "next/link";
-
-// Mock data - will be replaced with real API calls
-const mockOrders = [
-  {
-    id: "ORD-8234",
-    restaurant: "Dragon Wok",
-    restaurantId: "1",
-    items: [
-      { name: "Kung Pao Chicken", quantity: 2, price: 14.5 },
-      { name: "Fried Rice", quantity: 1, price: 8.0 },
-      { name: "Spring Rolls", quantity: 3, price: 2.5 },
-    ],
-    status: "delivered",
-    total: 45.5,
-    date: "Jan 30, 2026",
-    time: "7:45 PM",
-    rating: 5,
-    image: "🥡",
-  },
-  {
-    id: "ORD-8233",
-    restaurant: "Pizza Paradise",
-    restaurantId: "2",
-    items: [
-      { name: "Margherita Pizza", quantity: 1, price: 18.99 },
-      { name: "Garlic Bread", quantity: 1, price: 6.0 },
-    ],
-    status: "delivered",
-    total: 24.99,
-    date: "Jan 28, 2026",
-    time: "6:30 PM",
-    rating: 4,
-    image: "🍕",
-  },
-  {
-    id: "ORD-8232",
-    restaurant: "Burger Haven",
-    restaurantId: "3",
-    items: [
-      { name: "Double Cheeseburger", quantity: 1, price: 12.5 },
-      { name: "Fries", quantity: 1, price: 4.0 },
-      { name: "Milkshake", quantity: 1, price: 5.5 },
-    ],
-    status: "delivered",
-    total: 22.0,
-    date: "Jan 26, 2026",
-    time: "8:15 PM",
-    rating: 5,
-    image: "🍔",
-  },
-  {
-    id: "ORD-8231",
-    restaurant: "Sushi Masters",
-    restaurantId: "4",
-    items: [
-      { name: "California Roll", quantity: 2, price: 12.0 },
-      { name: "Salmon Nigiri", quantity: 1, price: 15.0 },
-      { name: "Miso Soup", quantity: 1, price: 5.0 },
-    ],
-    status: "delivered",
-    total: 44.0,
-    date: "Jan 25, 2026",
-    time: "7:00 PM",
-    rating: 5,
-    image: "🍣",
-  },
-  {
-    id: "ORD-8230",
-    restaurant: "Taco Fiesta",
-    restaurantId: "5",
-    items: [
-      { name: "Beef Tacos", quantity: 3, price: 3.5 },
-      { name: "Guacamole", quantity: 1, price: 4.0 },
-    ],
-    status: "cancelled",
-    total: 14.5,
-    date: "Jan 24, 2026",
-    time: "6:45 PM",
-    rating: 0,
-    image: "🌮",
-  },
-  {
-    id: "ORD-8229",
-    restaurant: "Dragon Wok",
-    restaurantId: "1",
-    items: [
-      { name: "Sweet & Sour Pork", quantity: 1, price: 13.5 },
-      { name: "Egg Fried Rice", quantity: 2, price: 8.0 },
-    ],
-    status: "delivered",
-    total: 29.5,
-    date: "Jan 22, 2026",
-    time: "8:30 PM",
-    rating: 4,
-    image: "🥡",
-  },
-];
+import { useOrders } from "@/lib/hooks/order.hooks";
+import type { OrderStatus } from "@/lib/api/types/order.types";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 export default function OrdersPage() {
   const [searchQuery, setSearchQuery] = useState("");
-  const [filterStatus, setFilterStatus] = useState<string>("all");
+  const [filterStatus, setFilterStatus] = useState<OrderStatus | "all">("all");
+  const [currentPage, setCurrentPage] = useState(1);
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
+  const pageSize = 10;
 
-  const getStatusConfig = (status: string) => {
+  // Fetch orders with filters
+  const {
+    data: ordersResponse,
+    isLoading,
+    error,
+    refetch,
+  } = useOrders({
+    page: currentPage,
+    limit: pageSize,
+    status: filterStatus !== "all" ? filterStatus : undefined,
+    startDate: startDate || undefined,
+    endDate: endDate || undefined,
+  });
+
+  const orders = ordersResponse?.data || [];
+  const totalPages = ordersResponse ? ordersResponse.pagination.totalPages : 1;
+
+  // Calculate stats from fetched orders
+  const stats = useMemo(() => {
+    if (!ordersResponse) {
+      return {
+        total: 0,
+        delivered: 0,
+        cancelled: 0,
+        totalSpent: 0,
+      };
+    }
+
+    return {
+      total: ordersResponse.pagination.total,
+      delivered: orders.filter((o) => o.status === "delivered").length,
+      cancelled: orders.filter((o) => o.status === "cancelled").length,
+      totalSpent: orders
+        .filter((o) => o.status === "delivered")
+        .reduce((sum, o) => sum + o.total, 0),
+    };
+  }, [ordersResponse, orders]);
+
+  const getStatusConfig = (status: OrderStatus) => {
     switch (status) {
       case "delivered":
         return {
@@ -128,10 +84,34 @@ export default function OrdersPage() {
           color: "bg-green-50 text-green-700 border-green-200",
           icon: CheckCircle,
         };
-      case "in_progress":
+      case "pending":
         return {
-          label: "In Progress",
+          label: "Pending",
+          color: "bg-yellow-50 text-yellow-700 border-yellow-200",
+          icon: Clock,
+        };
+      case "confirmed":
+        return {
+          label: "Confirmed",
           color: "bg-blue-50 text-blue-700 border-blue-200",
+          icon: Package,
+        };
+      case "preparing":
+        return {
+          label: "Preparing",
+          color: "bg-purple-50 text-purple-700 border-purple-200",
+          icon: Package,
+        };
+      case "ready":
+        return {
+          label: "Ready",
+          color: "bg-green-50 text-green-700 border-green-200",
+          icon: Package,
+        };
+      case "out_for_delivery":
+        return {
+          label: "Out for Delivery",
+          color: "bg-indigo-50 text-indigo-700 border-indigo-200",
           icon: Package,
         };
       case "cancelled":
@@ -149,22 +129,22 @@ export default function OrdersPage() {
     }
   };
 
-  const filteredOrders = mockOrders.filter((order) => {
-    const matchesSearch =
-      order.restaurant.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      order.id.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesFilter =
-      filterStatus === "all" || order.status === filterStatus;
-    return matchesSearch && matchesFilter;
-  });
+  const formatDate = (dateString: string) => {
+    const date = new Date(dateString);
+    return date.toLocaleDateString("en-US", {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+    });
+  };
 
-  const stats = {
-    total: mockOrders.length,
-    delivered: mockOrders.filter((o) => o.status === "delivered").length,
-    cancelled: mockOrders.filter((o) => o.status === "cancelled").length,
-    totalSpent: mockOrders
-      .filter((o) => o.status === "delivered")
-      .reduce((sum, o) => sum + o.total, 0),
+  const formatTime = (dateString: string) => {
+    const date = new Date(dateString);
+    return date.toLocaleTimeString("en-US", {
+      hour: "numeric",
+      minute: "2-digit",
+      hour12: true,
+    });
   };
 
   return (
@@ -233,160 +213,267 @@ export default function OrdersPage() {
       </div>
 
       {/* Filters */}
-      <div className="flex flex-col sm:flex-row gap-4 mb-6">
-        <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-          <Input
-            placeholder="Search orders or restaurants..."
-            className="pl-10"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-          />
+      <div className="flex flex-col gap-4 mb-6">
+        <div className="flex flex-col sm:flex-row gap-4">
+          <div className="flex-1">
+            <label className="text-sm font-medium mb-2 block">
+              Status Filter
+            </label>
+            <Select
+              value={filterStatus}
+              onValueChange={(value) =>
+                setFilterStatus(value as OrderStatus | "all")
+              }
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Filter by status" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Orders</SelectItem>
+                <SelectItem value="pending">Pending</SelectItem>
+                <SelectItem value="confirmed">Confirmed</SelectItem>
+                <SelectItem value="preparing">Preparing</SelectItem>
+                <SelectItem value="ready">Ready</SelectItem>
+                <SelectItem value="out_for_delivery">
+                  Out for Delivery
+                </SelectItem>
+                <SelectItem value="delivered">Delivered</SelectItem>
+                <SelectItem value="cancelled">Cancelled</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
         </div>
-        <div className="flex gap-2">
-          <Button
-            variant={filterStatus === "all" ? "default" : "outline"}
-            size="sm"
-            onClick={() => setFilterStatus("all")}
-          >
-            All
-          </Button>
-          <Button
-            variant={filterStatus === "delivered" ? "default" : "outline"}
-            size="sm"
-            onClick={() => setFilterStatus("delivered")}
-          >
-            Delivered
-          </Button>
-          <Button
-            variant={filterStatus === "cancelled" ? "default" : "outline"}
-            size="sm"
-            onClick={() => setFilterStatus("cancelled")}
-          >
-            Cancelled
-          </Button>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div>
+            <label className="text-sm font-medium mb-2 block">Start Date</label>
+            <Input
+              type="date"
+              value={startDate}
+              onChange={(e) => setStartDate(e.target.value)}
+              placeholder="Start date"
+            />
+          </div>
+          <div>
+            <label className="text-sm font-medium mb-2 block">End Date</label>
+            <Input
+              type="date"
+              value={endDate}
+              onChange={(e) => setEndDate(e.target.value)}
+              placeholder="End date"
+            />
+          </div>
         </div>
       </div>
 
-      {/* Orders List */}
-      <div className="space-y-4">
-        {filteredOrders.map((order) => {
-          const statusConfig = getStatusConfig(order.status);
-          const StatusIcon = statusConfig.icon;
-
-          return (
-            <Card
-              key={order.id}
-              className="p-6 hover:shadow-md transition-shadow"
-            >
-              <div className="flex flex-col lg:flex-row gap-6">
-                {/* Left: Order Info */}
-                <div className="flex gap-4 flex-1">
-                  <div className="w-16 h-16 rounded-xl bg-linear-to-br from-orange-50 to-rose-50 flex items-center justify-center text-3xl shrink-0">
-                    {order.image}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-start justify-between gap-4 mb-2">
-                      <div>
-                        <h3 className="font-heading font-semibold text-lg mb-1">
-                          {order.restaurant}
-                        </h3>
-                        <p className="text-sm text-muted-foreground">
-                          Order #{order.id}
-                        </p>
-                      </div>
-                      <Badge variant="outline" className={statusConfig.color}>
-                        <StatusIcon className="w-3 h-3 mr-1" />
-                        {statusConfig.label}
-                      </Badge>
-                    </div>
-
-                    <div className="space-y-1 mb-3">
-                      {order.items.map((item, idx) => (
-                        <p key={idx} className="text-sm text-muted-foreground">
-                          {item.quantity}x {item.name}
-                        </p>
-                      ))}
-                    </div>
-
-                    <div className="flex items-center gap-4 text-xs text-muted-foreground">
-                      <div className="flex items-center gap-1">
-                        <Clock className="w-3 h-3" />
-                        {order.date} at {order.time}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Right: Actions */}
-                <div className="flex flex-col items-end justify-between lg:w-48 shrink-0">
-                  <div className="text-right mb-4 lg:mb-0">
-                    <p className="text-lg font-heading font-bold">
-                      ${order.total.toFixed(2)}
-                    </p>
-                    {order.status === "delivered" && order.rating > 0 && (
-                      <div className="flex items-center gap-1 justify-end mt-1">
-                        {Array.from({ length: 5 }).map((_, i) => (
-                          <Star
-                            key={i}
-                            className={`w-3 h-3 ${
-                              i < order.rating
-                                ? "fill-amber-400 text-amber-400"
-                                : "text-muted"
-                            }`}
-                          />
-                        ))}
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="flex flex-col gap-2 w-full">
-                    {order.status === "delivered" && (
-                      <>
-                        <Button size="sm" variant="outline" className="w-full">
-                          Reorder
-                        </Button>
-                        {order.rating === 0 && (
-                          <Button size="sm" className="w-full">
-                            Rate Order
-                          </Button>
-                        )}
-                      </>
-                    )}
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      className="w-full"
-                      asChild
-                    >
-                      <Link href={`/restaurants/${order.restaurantId}`}>
-                        View Restaurant
-                      </Link>
-                    </Button>
-                  </div>
+      {/* Loading State */}
+      {isLoading && (
+        <div className="space-y-4">
+          {[...Array(3)].map((_, i) => (
+            <Card key={i} className="p-6">
+              <div className="flex gap-4 animate-pulse">
+                <div className="w-16 h-16 rounded-xl bg-muted" />
+                <div className="flex-1 space-y-3">
+                  <div className="h-4 bg-muted rounded w-1/4" />
+                  <div className="h-3 bg-muted rounded w-1/3" />
+                  <div className="h-3 bg-muted rounded w-1/2" />
                 </div>
               </div>
             </Card>
-          );
-        })}
+          ))}
+        </div>
+      )}
 
-        {filteredOrders.length === 0 && (
-          <Card className="p-12 text-center">
-            <Package className="w-16 h-16 text-muted-foreground/50 mx-auto mb-4" />
-            <h3 className="font-heading font-semibold text-lg mb-2">
-              No orders found
-            </h3>
-            <p className="text-muted-foreground mb-6">
-              {searchQuery
-                ? "Try adjusting your search or filters"
-                : "Start ordering from your favorite restaurants"}
-            </p>
-            <Button asChild>
-              <Link href="/restaurants">Browse Restaurants</Link>
-            </Button>
-          </Card>
-        )}
-      </div>
+      {/* Error State */}
+      {error && (
+        <Card className="p-12 text-center">
+          <AlertCircle className="w-16 h-16 text-red-500 mx-auto mb-4" />
+          <h3 className="font-heading font-semibold text-lg mb-2">
+            Failed to Load Orders
+          </h3>
+          <p className="text-muted-foreground mb-6">
+            {error instanceof Error
+              ? error.message
+              : "An error occurred while loading your orders"}
+          </p>
+          <Button onClick={() => refetch()}>Try Again</Button>
+        </Card>
+      )}
+
+      {/* Orders List */}
+      {!isLoading && !error && (
+        <>
+          <div className="space-y-4">
+            {orders.map((order) => {
+              const statusConfig = getStatusConfig(order.status);
+              const StatusIcon = statusConfig.icon;
+
+              return (
+                <Card
+                  key={order.id}
+                  className="p-6 hover:shadow-md transition-shadow"
+                >
+                  <div className="flex flex-col lg:flex-row gap-6">
+                    {/* Left: Order Info */}
+                    <div className="flex gap-4 flex-1">
+                      <div className="w-16 h-16 rounded-xl bg-gradient-to-br from-orange-50 to-rose-50 flex items-center justify-center text-3xl shrink-0">
+                        🍽️
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-start justify-between gap-4 mb-2">
+                          <div>
+                            <h3 className="font-heading font-semibold text-lg mb-1">
+                              Order #{order.id.slice(0, 8)}
+                            </h3>
+                            <p className="text-sm text-muted-foreground">
+                              {order.items.length} item
+                              {order.items.length !== 1 ? "s" : ""}
+                            </p>
+                          </div>
+                          <Badge
+                            variant="outline"
+                            className={statusConfig.color}
+                          >
+                            <StatusIcon className="w-3 h-3 mr-1" />
+                            {statusConfig.label}
+                          </Badge>
+                        </div>
+
+                        <div className="space-y-1 mb-3">
+                          {order.items.slice(0, 3).map((item, idx) => (
+                            <p
+                              key={idx}
+                              className="text-sm text-muted-foreground"
+                            >
+                              {item.quantity}x {item.name}
+                            </p>
+                          ))}
+                          {order.items.length > 3 && (
+                            <p className="text-sm text-muted-foreground italic">
+                              +{order.items.length - 3} more item
+                              {order.items.length - 3 !== 1 ? "s" : ""}
+                            </p>
+                          )}
+                        </div>
+
+                        <div className="flex items-center gap-4 text-xs text-muted-foreground">
+                          <div className="flex items-center gap-1">
+                            <Clock className="w-3 h-3" />
+                            {formatDate(order.createdAt)} at{" "}
+                            {formatTime(order.createdAt)}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Right: Actions */}
+                    <div className="flex flex-col items-end justify-between lg:w-48 shrink-0">
+                      <div className="text-right mb-4 lg:mb-0">
+                        <p className="text-lg font-heading font-bold">
+                          ${order.total.toFixed(2)}
+                        </p>
+                        {order.status === "delivered" && order.rating && (
+                          <div className="flex items-center gap-1 justify-end mt-1">
+                            {Array.from({ length: 5 }).map((_, i) => (
+                              <Star
+                                key={i}
+                                className={`w-3 h-3 ${
+                                  i < order.rating!
+                                    ? "fill-amber-400 text-amber-400"
+                                    : "text-muted"
+                                }`}
+                              />
+                            ))}
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="flex flex-col gap-2 w-full">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="w-full"
+                          asChild
+                        >
+                          <Link href={`/orders/${order.id}`}>View Details</Link>
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                </Card>
+              );
+            })}
+
+            {orders.length === 0 && (
+              <Card className="p-12 text-center">
+                <Package className="w-16 h-16 text-muted-foreground/50 mx-auto mb-4" />
+                <h3 className="font-heading font-semibold text-lg mb-2">
+                  No orders found
+                </h3>
+                <p className="text-muted-foreground mb-6">
+                  {filterStatus !== "all" || startDate || endDate
+                    ? "Try adjusting your filters"
+                    : "Start ordering from your favorite restaurants"}
+                </p>
+                <Button asChild>
+                  <Link href="/restaurants">Browse Restaurants</Link>
+                </Button>
+              </Card>
+            )}
+          </div>
+
+          {/* Pagination */}
+          {totalPages > 1 && (
+            <div className="flex items-center justify-center gap-2 mt-8">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                disabled={currentPage === 1}
+              >
+                <ChevronLeft className="w-4 h-4" />
+                Previous
+              </Button>
+              <div className="flex items-center gap-2">
+                {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                  let pageNum;
+                  if (totalPages <= 5) {
+                    pageNum = i + 1;
+                  } else if (currentPage <= 3) {
+                    pageNum = i + 1;
+                  } else if (currentPage >= totalPages - 2) {
+                    pageNum = totalPages - 4 + i;
+                  } else {
+                    pageNum = currentPage - 2 + i;
+                  }
+
+                  return (
+                    <Button
+                      key={pageNum}
+                      variant={currentPage === pageNum ? "default" : "outline"}
+                      size="sm"
+                      onClick={() => setCurrentPage(pageNum)}
+                    >
+                      {pageNum}
+                    </Button>
+                  );
+                })}
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() =>
+                  setCurrentPage((p) => Math.min(totalPages, p + 1))
+                }
+                disabled={currentPage === totalPages}
+              >
+                Next
+                <ChevronRight className="w-4 h-4" />
+              </Button>
+            </div>
+          )}
+        </>
+      )}
     </DashboardLayout>
   );
 }

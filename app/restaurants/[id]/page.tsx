@@ -1,130 +1,176 @@
 "use client";
 
-import { use, useState, useEffect } from "react";
+import { use, useMemo } from "react";
 import { MenuItemCard } from "@/components/restaurant/MenuItemCard";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Star, Clock, MapPin, ChevronLeft, Share2, Heart } from "lucide-react";
+import {
+  Star,
+  Clock,
+  MapPin,
+  ChevronLeft,
+  Share2,
+  Heart,
+  AlertCircle,
+} from "lucide-react";
 import Link from "next/link";
 import { Skeleton } from "@/components/ui/skeleton";
 import MainLayout from "@/components/layout/MainLayout";
+import { useRestaurant, useRestaurantMenu } from "@/lib/hooks/restaurant.hooks";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import type { MenuItem } from "@/lib/api/types";
+import { FavoriteButton } from "@/components/restaurant/FavoriteButton";
 
-// Mock Data
-interface MockItem {
-  id: string;
-  name: string;
-  description: string;
-  price: number;
-  image?: string;
-}
-
-interface MockCategory {
-  name: string;
-  items: MockItem[];
-}
-
-const MOCK_RESTAURANT = {
-  id: "1",
-  name: "Gourmet Burger Kitchen",
-  image:
-    "https://images.unsplash.com/photo-1550547660-d9450f859349?q=80&w=2000&auto=format&fit=crop",
-  priceRange: "$$",
-  tags: ["Burgers", "American", "Fast Food"],
-  rating: 4.8,
-  reviewCount: 1240,
-  deliveryTime: "20-30 min",
-  address: "123 Main Street, New York, NY",
-  categories: [
-    {
-      name: "Popular Items",
-      items: [
-        {
-          id: "101",
-          name: "Classic Cheeseburger",
-          description:
-            "Angus beef patty, cheddar cheese, lettuce, tomato, house sauce.",
-          price: 12.99,
-          image:
-            "https://images.unsplash.com/photo-1568901346375-23c9450c58cd?w=400",
-        },
-        {
-          id: "102",
-          name: "Bacon Double XL",
-          description: "Two patties, crispy bacon, double cheese, BBQ sauce.",
-          price: 16.5,
-          image:
-            "https://images.unsplash.com/photo-1594212699903-ec8a3eca50f5?w=400",
-        },
-        {
-          id: "103",
-          name: "Veggie Deluxe",
-          description: "Plant-based patty, avocado, sprouts, vegan mayo.",
-          price: 14.0,
-          image:
-            "https://images.unsplash.com/photo-1550547660-d9450f859349?w=400",
-        },
-      ],
-    },
-    {
-      name: "Sides",
-      items: [
-        {
-          id: "201",
-          name: "Crispy Fries",
-          description: "Sea salt, rosemary.",
-          price: 4.5,
-        },
-        {
-          id: "202",
-          name: "Onion Rings",
-          description: "Beer battered onion rings with ranch dip.",
-          price: 5.5,
-        },
-      ],
-    },
-    {
-      name: "Drinks",
-      items: [
-        {
-          id: "301",
-          name: "Vanilla Shake",
-          description: "Real vanilla bean ice cream.",
-          price: 6.0,
-        },
-        { id: "302", name: "Cola", description: "Ice cold soda.", price: 2.5 },
-      ],
-    },
-  ] as MockCategory[],
+// Helper function to format price range
+const formatPriceRange = (priceRange: number): string => {
+  return "$".repeat(priceRange);
 };
+
+// Helper function to format delivery time
+const formatDeliveryTime = (minutes: number): string => {
+  return `${minutes} min`;
+};
+
+// Loading skeleton component
+function RestaurantDetailSkeleton() {
+  return (
+    <MainLayout>
+      <div className="h-96 md:h-[500px] w-full bg-gray-100 animate-pulse" />
+      <div className="container mx-auto px-6 -mt-20 relative z-10 pb-32">
+        <div className="grid lg:grid-cols-12 gap-8">
+          <div className="lg:col-span-8 space-y-8">
+            <div className="bg-white/95 backdrop-blur-3xl rounded-[40px] shadow-[0_32px_80px_-20px_rgba(0,0,0,0.15)] border border-white/40 p-8 md:p-12">
+              <Skeleton className="h-8 w-2/3 mb-4" />
+              <Skeleton className="h-4 w-1/3 mb-8" />
+              <div className="space-y-4">
+                <Skeleton className="h-32 w-full" />
+                <Skeleton className="h-32 w-full" />
+                <Skeleton className="h-32 w-full" />
+              </div>
+            </div>
+          </div>
+          <div className="lg:col-span-4">
+            <Skeleton className="h-64 w-full rounded-[40px]" />
+          </div>
+        </div>
+      </div>
+    </MainLayout>
+  );
+}
+
+// Error component
+function RestaurantError({
+  error,
+  onRetry,
+}: {
+  error: Error;
+  onRetry: () => void;
+}) {
+  return (
+    <MainLayout>
+      <div className="container mx-auto px-6 py-20">
+        <Alert variant="destructive" className="max-w-2xl mx-auto">
+          <AlertCircle className="h-4 w-4" />
+          <AlertTitle>Error Loading Restaurant</AlertTitle>
+          <AlertDescription className="mt-2">
+            {error.message ||
+              "Failed to load restaurant details. Please try again."}
+          </AlertDescription>
+          <Button onClick={onRetry} variant="outline" className="mt-4">
+            Retry
+          </Button>
+        </Alert>
+      </div>
+    </MainLayout>
+  );
+}
 
 export default function RestaurantPage({
   params,
 }: {
   params: Promise<{ id: string }>;
 }) {
-  // Use `use` to unwrap params in Next.js 16 (or await it if async component, but this is client component)
-  // Actually in Next 15/16 client components `params` is a promise.
   const resolvedParams = use(params);
-  const [loading, setLoading] = useState(true);
+  const restaurantId = resolvedParams.id;
 
-  useEffect(() => {
-    // Simulate fetch
-    setTimeout(() => setLoading(false), 800);
-  }, []);
+  // Fetch restaurant and menu data
+  const {
+    data: restaurant,
+    isLoading: isLoadingRestaurant,
+    error: restaurantError,
+    refetch: refetchRestaurant,
+  } = useRestaurant(restaurantId);
 
-  if (loading) {
+  const {
+    data: menuData,
+    isLoading: isLoadingMenu,
+    error: menuError,
+    refetch: refetchMenu,
+  } = useRestaurantMenu(restaurantId);
+
+  // Group menu items by category
+  const menuByCategory = useMemo(() => {
+    if (!menuData?.items) return [];
+
+    const grouped = menuData.items.reduce(
+      (acc, item) => {
+        if (!acc[item.category]) {
+          acc[item.category] = [];
+        }
+        acc[item.category].push(item);
+        return acc;
+      },
+      {} as Record<string, MenuItem[]>,
+    );
+
+    return Object.entries(grouped).map(([category, items]) => ({
+      name: category,
+      items,
+    }));
+  }, [menuData]);
+
+  // Handle loading state
+  if (isLoadingRestaurant || isLoadingMenu) {
+    return <RestaurantDetailSkeleton />;
+  }
+
+  // Handle error state
+  if (restaurantError || menuError) {
+    return (
+      <RestaurantError
+        error={(restaurantError || menuError) as Error}
+        onRetry={() => {
+          refetchRestaurant();
+          refetchMenu();
+        }}
+      />
+    );
+  }
+
+  // Handle not found
+  if (!restaurant) {
     return (
       <MainLayout>
-        <div className="h-75 w-full bg-gray-100 animate-pulse" />
-        <div className="container mx-auto px-4 -mt-20 relative z-10 pb-20">
-          <div className="bg-white p-6 rounded-xl shadow-sm border space-y-4">
-            <Skeleton className="h-8 w-2/3" />
-            <Skeleton className="h-4 w-1/3" />
-          </div>
+        <div className="container mx-auto px-6 py-20">
+          <Alert className="max-w-2xl mx-auto">
+            <AlertCircle className="h-4 w-4" />
+            <AlertTitle>Restaurant Not Found</AlertTitle>
+            <AlertDescription>
+              The restaurant you're looking for doesn't exist or has been
+              removed.
+            </AlertDescription>
+            <Link href="/restaurants">
+              <Button variant="outline" className="mt-4">
+                Browse Restaurants
+              </Button>
+            </Link>
+          </Alert>
         </div>
       </MainLayout>
     );
   }
+
+  const priceRange = formatPriceRange(restaurant.priceRange);
+  const deliveryTime = formatDeliveryTime(restaurant.estimatedDeliveryTime);
 
   return (
     <MainLayout>
@@ -132,7 +178,11 @@ export default function RestaurantPage({
       <div className="relative h-96 md:h-[500px] w-full overflow-hidden">
         <div
           className="absolute inset-0 bg-cover bg-center transition-transform duration-1000 hover:scale-105"
-          style={{ backgroundImage: `url(${MOCK_RESTAURANT.image})` }}
+          style={{
+            backgroundImage: restaurant.coverImage
+              ? `url(${restaurant.coverImage})`
+              : "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
+          }}
         >
           <div className="absolute inset-0 bg-linear-to-t from-secondary via-secondary/20 to-transparent" />
         </div>
@@ -157,21 +207,15 @@ export default function RestaurantPage({
           >
             <Share2 className="w-5 h-5" />
           </Button>
-          <Button
-            variant="secondary"
-            size="icon"
-            className="w-14 h-14 rounded-2xl bg-white/10 hover:bg-white/30 text-white backdrop-blur-xl border border-white/20 transition-all"
-          >
-            <Heart className="w-5 h-5" />
-          </Button>
+          <FavoriteButton restaurantId={restaurantId} variant="detail" />
         </div>
 
         <div className="absolute bottom-12 left-12 right-12 text-white">
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-primary text-white text-[10px] font-black uppercase tracking-widest mb-6 shadow-2xl">
-            Established Excellence
+            {restaurant.isOpen ? "Open Now" : "Closed"}
           </div>
           <h1 className="text-6xl md:text-8xl font-heading font-normal leading-tight tracking-tighter">
-            {MOCK_RESTAURANT.name}
+            {restaurant.name}
           </h1>
         </div>
       </div>
@@ -179,7 +223,6 @@ export default function RestaurantPage({
       {/* Restaurant Info & Menu */}
       <div className="container mx-auto px-6 -mt-20 relative z-10 pb-32">
         <div className="grid lg:grid-cols-12 gap-8 items-start">
-          
           {/* Main Content Area */}
           <div className="lg:col-span-8 space-y-8">
             <div className="bg-white/95 backdrop-blur-3xl rounded-[40px] shadow-[0_32px_80px_-20px_rgba(0,0,0,0.15)] border border-white/40 p-8 md:p-12">
@@ -187,16 +230,26 @@ export default function RestaurantPage({
                 <div className="flex flex-wrap items-center gap-6">
                   <div className="flex items-center gap-2 px-5 py-2.5 rounded-2xl bg-emerald-50 text-emerald-700">
                     <Star className="w-5 h-5 fill-emerald-500 text-emerald-500" />
-                    <span className="text-lg font-black">{MOCK_RESTAURANT.rating}</span>
-                    <span className="text-sm font-bold opacity-40">({MOCK_RESTAURANT.reviewCount}+ reviews)</span>
+                    <span className="text-lg font-black">
+                      {restaurant.rating.toFixed(1)}
+                    </span>
+                    <span className="text-sm font-bold opacity-40">
+                      ({restaurant.reviewCount}+ reviews)
+                    </span>
                   </div>
                   <div className="h-8 w-px bg-gray-100 hidden md:block" />
                   <div className="flex gap-3">
-                    {MOCK_RESTAURANT.tags.map(tag => (
-                      <span key={tag} className="px-4 py-2 rounded-xl bg-gray-50 text-[10px] font-black text-muted-foreground uppercase tracking-widest">
-                        {tag}
+                    {restaurant.cuisineType.map((cuisine) => (
+                      <span
+                        key={cuisine}
+                        className="px-4 py-2 rounded-xl bg-gray-50 text-[10px] font-black text-muted-foreground uppercase tracking-widest"
+                      >
+                        {cuisine}
                       </span>
                     ))}
+                    <span className="px-4 py-2 rounded-xl bg-gray-50 text-[10px] font-black text-muted-foreground uppercase tracking-widest">
+                      {priceRange}
+                    </span>
                   </div>
                 </div>
                 <div className="flex items-center gap-4">
@@ -204,53 +257,90 @@ export default function RestaurantPage({
                     <Clock className="w-6 h-6 text-primary" />
                   </div>
                   <div>
-                    <p className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">Delivery</p>
-                    <p className="font-bold text-secondary">{MOCK_RESTAURANT.deliveryTime}</p>
+                    <p className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">
+                      Delivery
+                    </p>
+                    <p className="font-bold text-secondary">{deliveryTime}</p>
                   </div>
                 </div>
               </div>
 
+              {/* Restaurant Description */}
+              {restaurant.description && (
+                <div className="mb-12 pb-12 border-b border-gray-100">
+                  <p className="text-muted-foreground leading-relaxed">
+                    {restaurant.description}
+                  </p>
+                </div>
+              )}
+
               {/* Menu Categories Navigation */}
-              <div className="sticky top-20 bg-white/80 backdrop-blur-md z-20 -mx-8 md:-mx-12 px-8 md:px-12 py-6 flex gap-8 overflow-x-auto scrollbar-hide border-y border-gray-50">
-                {MOCK_RESTAURANT.categories.map((cat, i) => (
-                  <a
-                    key={cat.name}
-                    href={`#category-${i}`}
-                    className={`flex-none text-xs font-black uppercase tracking-[0.2em] transition-all hover:text-primary ${
-                      i === 0 ? "text-primary" : "text-muted-foreground/60"
-                    }`}
-                  >
-                    {cat.name}
-                  </a>
-                ))}
-              </div>
+              {menuByCategory.length > 0 && (
+                <div className="sticky top-20 bg-white/80 backdrop-blur-md z-20 -mx-8 md:-mx-12 px-8 md:px-12 py-6 flex gap-8 overflow-x-auto scrollbar-hide border-y border-gray-50">
+                  {menuByCategory.map((cat, i) => (
+                    <a
+                      key={cat.name}
+                      href={`#category-${i}`}
+                      className={`flex-none text-xs font-black uppercase tracking-[0.2em] transition-all hover:text-primary ${
+                        i === 0 ? "text-primary" : "text-muted-foreground/60"
+                      }`}
+                    >
+                      {cat.name}
+                    </a>
+                  ))}
+                </div>
+              )}
 
               {/* Menu Items Grid */}
-              <div className="pt-16 space-y-24">
-                {MOCK_RESTAURANT.categories.map((cat, i) => (
-                  <div key={cat.name} id={`category-${i}`} className="scroll-mt-48 space-y-10">
-                    <div className="relative">
-                      <h3 className="text-4xl font-heading text-secondary tracking-tight">
-                        {cat.name}
-                      </h3>
-                      <div className="absolute -bottom-4 left-0 w-12 h-1 bg-primary/20 rounded-full" />
+              {menuByCategory.length > 0 ? (
+                <div className="pt-16 space-y-24">
+                  {menuByCategory.map((cat, i) => (
+                    <div
+                      key={cat.name}
+                      id={`category-${i}`}
+                      className="scroll-mt-48 space-y-10"
+                    >
+                      <div className="relative">
+                        <h3 className="text-4xl font-heading text-secondary tracking-tight">
+                          {cat.name}
+                        </h3>
+                        <div className="absolute -bottom-4 left-0 w-12 h-1 bg-primary/20 rounded-full" />
+                      </div>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                        {cat.items.map((item) => (
+                          <div key={item.id} className="relative">
+                            <MenuItemCard
+                              id={item.id}
+                              name={item.name}
+                              description={item.description}
+                              price={item.price}
+                              image={item.image}
+                              restaurantId={restaurant.id}
+                              restaurantName={restaurant.name}
+                              allergens={item.allergens}
+                              nutritionalInfo={item.nutritionalInfo}
+                              isAvailable={item.isAvailable}
+                            />
+                            {!item.isAvailable && (
+                              <div className="absolute inset-0 bg-white/80 backdrop-blur-sm rounded-[32px] flex items-center justify-center">
+                                <span className="px-6 py-3 bg-gray-900 text-white text-sm font-bold rounded-2xl">
+                                  Currently Unavailable
+                                </span>
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
                     </div>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                      {cat.items.map((item) => (
-                        <MenuItemCard
-                          key={item.id}
-                          id={item.id}
-                          name={item.name}
-                          description={item.description}
-                          price={item.price}
-                          image={item.image}
-                          restaurantId={MOCK_RESTAURANT.id}
-                        />
-                      ))}
-                    </div>
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="pt-16 text-center">
+                  <p className="text-muted-foreground">
+                    No menu items available at this time.
+                  </p>
+                </div>
+              )}
             </div>
           </div>
 
@@ -260,48 +350,68 @@ export default function RestaurantPage({
               <div className="absolute top-0 right-0 w-40 h-40 bg-primary/10 rounded-full blur-[80px] group-hover:bg-primary/20 transition-colors duration-700" />
               <div className="relative z-10 space-y-8">
                 <div className="space-y-2 text-center">
-                  <p className="text-[10px] font-black uppercase tracking-[0.3em] text-white/40">Estimated Arrival</p>
-                  <p className="text-5xl font-heading italic text-primary">{MOCK_RESTAURANT.deliveryTime}</p>
+                  <p className="text-[10px] font-black uppercase tracking-[0.3em] text-white/40">
+                    Estimated Arrival
+                  </p>
+                  <p className="text-5xl font-heading italic text-primary">
+                    {deliveryTime}
+                  </p>
                 </div>
                 <div className="h-px bg-white/10" />
                 <div className="space-y-4">
                   <div className="flex justify-between items-center text-xs font-black uppercase tracking-widest text-white/60">
-                    <span>Min selection</span>
-                    <span className="text-white">$15.00</span>
+                    <span>Min Order</span>
+                    <span className="text-white">
+                      ${restaurant.minimumOrder.toFixed(2)}
+                    </span>
                   </div>
                   <div className="flex justify-between items-center text-xs font-black uppercase tracking-widest text-white/60">
-                    <span>Concierge Fee</span>
-                    <span className="text-primary italic">Complimentary</span>
+                    <span>Delivery Fee</span>
+                    <span className="text-white">
+                      {restaurant.deliveryFee === 0
+                        ? "Free"
+                        : `$${restaurant.deliveryFee.toFixed(2)}`}
+                    </span>
                   </div>
                 </div>
-                <Button className="w-full h-16 rounded-2xl bg-white text-secondary hover:bg-primary hover:text-white text-lg font-black transition-all">
-                  Start Order
+                <Button
+                  className="w-full h-16 rounded-2xl bg-white text-secondary hover:bg-primary hover:text-white text-lg font-black transition-all"
+                  disabled={!restaurant.isOpen || !restaurant.isAvailable}
+                >
+                  {restaurant.isOpen && restaurant.isAvailable
+                    ? "Start Order"
+                    : "Currently Closed"}
                 </Button>
               </div>
             </div>
 
             <div className="bg-white p-8 rounded-[40px] border border-gray-100 space-y-6">
-              <h4 className="text-xs font-black uppercase tracking-widest text-secondary">Location & Hour</h4>
+              <h4 className="text-xs font-black uppercase tracking-widest text-secondary">
+                Location & Contact
+              </h4>
               <div className="flex gap-4">
                 <div className="w-10 h-10 rounded-xl bg-gray-50 flex items-center justify-center shrink-0">
                   <MapPin className="w-5 h-5 text-secondary" />
                 </div>
                 <p className="text-sm font-bold text-muted-foreground leading-relaxed">
-                  {MOCK_RESTAURANT.address}
+                  {restaurant.address}
                 </p>
               </div>
-              <div className="pt-4 flex gap-4">
-                <div className="w-10 h-10 rounded-xl bg-gray-50 flex items-center justify-center shrink-0">
-                  <Clock className="w-5 h-5 text-secondary" />
+              {restaurant.phone && (
+                <div className="pt-4 flex gap-4">
+                  <div className="w-10 h-10 rounded-xl bg-gray-50 flex items-center justify-center shrink-0">
+                    <Clock className="w-5 h-5 text-secondary" />
+                  </div>
+                  <div className="text-sm">
+                    <p className="font-bold text-secondary">Phone</p>
+                    <p className="font-bold text-muted-foreground">
+                      {restaurant.phone}
+                    </p>
+                  </div>
                 </div>
-                <div className="text-sm">
-                  <p className="font-bold text-secondary">Open Today</p>
-                  <p className="font-bold text-muted-foreground">10:00 AM - 11:00 PM</p>
-                </div>
-              </div>
+              )}
             </div>
           </div>
-
         </div>
       </div>
     </MainLayout>

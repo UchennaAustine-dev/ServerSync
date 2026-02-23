@@ -13,6 +13,7 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { useAuthStore, useCartStore } from "@/lib/store";
+import { useLogout } from "@/lib/hooks/auth.hooks";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -23,6 +24,8 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
+import { ToastContainer } from "@/components/ui/toast-container";
+import { SkipNavigation } from "./SkipNavigation";
 import { useState, useEffect } from "react";
 
 const navLinks = [
@@ -32,8 +35,9 @@ const navLinks = [
 
 export function Navbar() {
   const pathname = usePathname();
-  const { user, logout } = useAuthStore();
-  const { items, total, removeFromCart, clearCart } = useCartStore();
+  const { user } = useAuthStore();
+  const logout = useLogout();
+  const { items, getTotal, removeFromCart, clearCart } = useCartStore();
   const [isScrolled, setIsScrolled] = useState(false);
   const [hydrated, setHydrated] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -49,6 +53,7 @@ export function Navbar() {
 
   return (
     <header
+      role="banner"
       className={`fixed top-0 left-0 right-0 z-50 transition-all duration-200 ${
         isScrolled
           ? "bg-white/95 backdrop-blur-sm border-b border-gray-100 shadow-sm"
@@ -58,9 +63,16 @@ export function Navbar() {
       <div className="container mx-auto px-4">
         <div className="h-16 flex items-center justify-between">
           {/* Logo */}
-          <Link href="/" className="flex items-center gap-2 group">
+          <Link
+            href="/"
+            className="flex items-center gap-2 group"
+            aria-label="ServeSync Home"
+          >
             <div className="relative">
-              <div className="absolute inset-0 bg-primary/20 blur-xl rounded-full scale-150 opacity-0 group-hover:opacity-100 transition-opacity duration-700" />
+              <div
+                className="absolute inset-0 bg-primary/20 blur-xl rounded-full scale-150 opacity-0 group-hover:opacity-100 transition-opacity duration-700"
+                aria-hidden="true"
+              />
               <span className="relative font-heading text-3xl font-normal tracking-[-0.05em] text-secondary group-hover:text-primary transition-colors duration-500">
                 Serve<span className="italic">Sync.</span>
               </span>
@@ -68,7 +80,10 @@ export function Navbar() {
           </Link>
 
           {/* Desktop Nav */}
-          <nav className="hidden md:flex items-center gap-1">
+          <nav
+            className="hidden md:flex items-center gap-1"
+            aria-label="Main navigation"
+          >
             {navLinks.map((link) => (
               <Link
                 key={link.href}
@@ -93,10 +108,17 @@ export function Navbar() {
                   variant="ghost"
                   size="icon"
                   className="relative hover:bg-primary/10 rounded-full transition-colors"
+                  aria-label={`Shopping cart with ${items.length} items`}
                 >
-                  <ShoppingBag className="w-5.5 h-5.5 text-secondary" />
+                  <ShoppingBag
+                    className="w-5.5 h-5.5 text-secondary"
+                    aria-hidden="true"
+                  />
                   {items.length > 0 && (
-                    <span className="absolute top-0 right-0 w-5 h-5 flex items-center justify-center rounded-full bg-primary text-white text-[10px] font-bold ring-2 ring-white">
+                    <span
+                      className="absolute top-0 right-0 w-5 h-5 flex items-center justify-center rounded-full bg-primary text-white text-[10px] font-bold ring-2 ring-white"
+                      aria-label={`${items.length} items in cart`}
+                    >
                       {items.length}
                     </span>
                   )}
@@ -114,15 +136,24 @@ export function Navbar() {
                     <div className="relative mb-8 group">
                       <div className="absolute inset-0 bg-primary/20 blur-[60px] rounded-full scale-150 group-hover:scale-[2] transition-transform duration-1000" />
                       <div className="relative w-32 h-32 rounded-full bg-white shadow-2xl flex items-center justify-center">
-                        <ShoppingBag className="w-12 h-12 text-primary" strokeWidth={1} />
+                        <ShoppingBag
+                          className="w-12 h-12 text-primary"
+                          strokeWidth={1}
+                        />
                       </div>
                     </div>
-                    <h3 className="text-2xl font-heading text-secondary mb-3">Silent Palate.</h3>
+                    <h3 className="text-2xl font-heading text-secondary mb-3">
+                      Silent Palate.
+                    </h3>
                     <p className="text-muted-foreground font-medium mb-10 max-w-[240px] leading-relaxed italic">
                       "Your basket awaits its first masterpiece."
                     </p>
                     <SheetClose asChild>
-                      <Button asChild variant="outline" className="h-14 px-10 rounded-2xl text-lg font-black border-gray-100 hover:bg-gray-50 transition-all">
+                      <Button
+                        asChild
+                        variant="outline"
+                        className="h-14 px-10 rounded-2xl text-lg font-black border-gray-100 hover:bg-gray-50 transition-all"
+                      >
                         <Link href="/restaurants">Explore Dining</Link>
                       </Button>
                     </SheetClose>
@@ -132,14 +163,20 @@ export function Navbar() {
                     <div className="flex-1 overflow-y-auto px-6 py-4 space-y-8 scrollbar-hide">
                       {items.map((item) => (
                         <div
-                          key={item.id}
+                          key={item.menuItemId}
                           className="flex items-center gap-6 group animate-in fade-in slide-in-from-right-8 duration-700"
                         >
                           <div className="w-20 h-20 rounded-2xl bg-gray-50 overflow-hidden shrink-0 shadow-lg group-hover:shadow-primary/5 transition-all">
                             {item.image ? (
-                              <img src={item.image} alt={item.name} className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110" />
+                              <img
+                                src={item.image}
+                                alt={item.name}
+                                className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110"
+                              />
                             ) : (
-                              <div className="w-full h-full flex items-center justify-center text-2xl bg-linear-to-br from-orange-50 to-rose-50">🍱</div>
+                              <div className="w-full h-full flex items-center justify-center text-2xl bg-linear-to-br from-orange-50 to-rose-50">
+                                🍱
+                              </div>
                             )}
                           </div>
                           <div className="flex-1 min-w-0">
@@ -152,13 +189,15 @@ export function Navbar() {
                               </span>
                               <div className="flex items-center gap-2">
                                 <span className="w-1 h-1 rounded-full bg-gray-200" />
-                                <span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Qty: {item.quantity}</span>
+                                <span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">
+                                  Qty: {item.quantity}
+                                </span>
                               </div>
                             </div>
                           </div>
                           <div className="flex flex-col gap-2">
                             <button
-                              onClick={() => removeFromCart(item.id)}
+                              onClick={() => removeFromCart(item.menuItemId)}
                               className="w-10 h-10 rounded-xl bg-gray-50 text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-all flex items-center justify-center"
                             >
                               <X className="w-4 h-4" />
@@ -172,7 +211,9 @@ export function Navbar() {
                       <div className="space-y-3">
                         <div className="flex justify-between items-center text-xs font-bold text-muted-foreground uppercase tracking-widest">
                           <span>Subtotal</span>
-                          <span className="tabular-nums">${total().toFixed(2)}</span>
+                          <span className="tabular-nums">
+                            ${getTotal().toFixed(2)}
+                          </span>
                         </div>
                         <div className="flex justify-between items-center text-xs font-bold text-muted-foreground uppercase tracking-widest">
                           <span>Concierge Fee</span>
@@ -181,18 +222,28 @@ export function Navbar() {
                         <div className="h-px bg-gray-200/50 my-2" />
                         <div className="flex justify-between items-end">
                           <div>
-                            <p className="text-[10px] font-black text-muted-foreground uppercase tracking-widest mb-1">Total Amount</p>
-                            <p className="text-4xl font-heading font-black text-secondary tabular-nums">${(total() + 4.99).toFixed(2)}</p>
+                            <p className="text-[10px] font-black text-muted-foreground uppercase tracking-widest mb-1">
+                              Total Amount
+                            </p>
+                            <p className="text-4xl font-heading font-black text-secondary tabular-nums">
+                              ${(getTotal() + 4.99).toFixed(2)}
+                            </p>
                           </div>
-                          <Badge variant="outline" className="bg-primary/5 text-primary border-primary/20 font-black h-8 px-4 rounded-xl">
+                          <Badge
+                            variant="outline"
+                            className="bg-primary/5 text-primary border-primary/20 font-black h-8 px-4 rounded-xl"
+                          >
                             {items.length} Elements
                           </Badge>
                         </div>
                       </div>
-                      
+
                       <div className="space-y-4 pt-2">
                         <SheetClose asChild>
-                          <Button asChild className="w-full h-16 rounded-[24px] text-lg font-black shadow-2xl shadow-primary/20 hover:scale-[1.02] active:scale-[0.98] transition-all">
+                          <Button
+                            asChild
+                            className="w-full h-16 rounded-[24px] text-lg font-black shadow-2xl shadow-primary/20 hover:scale-[1.02] active:scale-[0.98] transition-all"
+                          >
                             <Link href="/checkout">
                               Secure Checkout
                               <ChevronRight className="ml-2 w-5 h-5" />
@@ -216,7 +267,12 @@ export function Navbar() {
             {user ? (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button variant="ghost" size="icon" className="w-10 h-10 rounded-2xl border border-gray-100 hover:border-primary/20 hover:bg-primary/5 transition-all">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="w-10 h-10 rounded-2xl border border-gray-100 hover:border-primary/20 hover:bg-primary/5 transition-all"
+                    aria-label="User menu"
+                  >
                     <Avatar className="h-7 w-7">
                       <AvatarFallback className="bg-secondary text-white text-[10px] font-black uppercase tracking-tighter">
                         {user.name.charAt(0).toUpperCase()}
@@ -224,22 +280,44 @@ export function Navbar() {
                     </Avatar>
                   </Button>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-64 rounded-3xl p-2 border-gray-100 shadow-2xl">
+                <DropdownMenuContent
+                  align="end"
+                  className="w-64 rounded-3xl p-2 border-gray-100 shadow-2xl"
+                >
                   <DropdownMenuLabel className="px-4 py-3">
-                    <p className="font-black text-secondary leading-tight">{user.name}</p>
+                    <p className="font-black text-secondary leading-tight">
+                      {user.name}
+                    </p>
                     <p className="text-[10px] text-muted-foreground font-bold uppercase tracking-widest mt-1">
                       {user.email}
                     </p>
                   </DropdownMenuLabel>
                   <DropdownMenuSeparator className="bg-gray-50" />
-                  <DropdownMenuItem asChild className="rounded-2xl px-4 py-3 focus:bg-primary/5 focus:text-primary transition-colors">
-                    <Link href="/dashboard" className="cursor-pointer flex items-center font-bold">
+                  <DropdownMenuItem
+                    asChild
+                    className="rounded-2xl px-4 py-3 focus:bg-primary/5 focus:text-primary transition-colors"
+                  >
+                    <Link
+                      href="/dashboard"
+                      className="cursor-pointer flex items-center font-bold"
+                    >
                       <User className="mr-3 h-4 w-4" /> Account Setting
+                    </Link>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    asChild
+                    className="rounded-2xl px-4 py-3 focus:bg-primary/5 focus:text-primary transition-colors"
+                  >
+                    <Link
+                      href="/favorites"
+                      className="cursor-pointer flex items-center font-bold"
+                    >
+                      <ShoppingBag className="mr-3 h-4 w-4" /> My Favorites
                     </Link>
                   </DropdownMenuItem>
                   <DropdownMenuSeparator className="bg-gray-50" />
                   <DropdownMenuItem
-                    onClick={logout}
+                    onClick={() => logout.mutate()}
                     className="rounded-2xl px-4 py-3 text-destructive focus:bg-destructive/5 focus:text-destructive cursor-pointer font-bold"
                   >
                     <LogOut className="mr-3 h-4 w-4" /> Sign out
@@ -248,10 +326,16 @@ export function Navbar() {
               </DropdownMenu>
             ) : (
               <div className="hidden md:flex items-center gap-4 ml-2">
-                <Link href="/login" className="text-xs font-black uppercase tracking-widest text-muted-foreground hover:text-primary transition-colors">
+                <Link
+                  href="/login"
+                  className="text-xs font-black uppercase tracking-widest text-muted-foreground hover:text-primary transition-colors"
+                >
                   Sign In
                 </Link>
-                <Button asChild className="h-10 px-6 rounded-xl font-black text-xs uppercase tracking-widest shadow-xl shadow-primary/20 hover:scale-105 active:scale-95 transition-all">
+                <Button
+                  asChild
+                  className="h-10 px-6 rounded-xl font-black text-xs uppercase tracking-widest shadow-xl shadow-primary/20 hover:scale-105 active:scale-95 transition-all"
+                >
                   <Link href="/register">Get Started</Link>
                 </Button>
               </div>
@@ -260,8 +344,13 @@ export function Navbar() {
             {/* Mobile Menu Toggle */}
             <Sheet open={mobileMenuOpen} onOpenChange={setMobileMenuOpen}>
               <SheetTrigger asChild>
-                <Button variant="ghost" size="icon" className="md:hidden">
-                  <Menu className="w-5 h-5" />
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="md:hidden"
+                  aria-label="Open mobile menu"
+                >
+                  <Menu className="w-5 h-5" aria-hidden="true" />
                 </Button>
               </SheetTrigger>
               <SheetContent side="right" className="w-72">
@@ -309,10 +398,13 @@ export function Navbar() {
 
 export function Footer() {
   return (
-    <footer className="bg-white border-t border-gray-100 mt-auto relative overflow-hidden">
+    <footer
+      className="bg-white border-t border-gray-100 mt-auto relative overflow-hidden"
+      role="contentinfo"
+    >
       <div className="absolute top-0 left-1/4 w-96 h-96 bg-primary/5 rounded-full blur-[120px] -z-10" />
       <div className="absolute bottom-0 right-1/4 w-96 h-96 bg-secondary/5 rounded-full blur-[120px] -z-10" />
-      
+
       <div className="container mx-auto px-6 py-20">
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-12 lg:gap-8 mb-20">
           <div className="space-y-8">
@@ -322,34 +414,52 @@ export function Footer() {
               </span>
             </Link>
             <p className="text-muted-foreground text-sm font-medium leading-relaxed max-w-xs">
-              Deleviring the most premium culinary experiences from top-tier local restaurants straight to your doorstep.
+              Deleviring the most premium culinary experiences from top-tier
+              local restaurants straight to your doorstep.
             </p>
             <div className="flex gap-4">
-              {['Facebook', 'Twitter', 'Instagram'].map(social => (
-                <Link key={social} href="#" className="w-10 h-10 rounded-xl bg-gray-50 flex items-center justify-center text-secondary hover:bg-primary hover:text-white transition-all duration-300">
-                  <span className="text-[10px] font-black uppercase">{social[0]}</span>
+              {["Facebook", "Twitter", "Instagram"].map((social) => (
+                <Link
+                  key={social}
+                  href="#"
+                  className="w-10 h-10 rounded-xl bg-gray-50 flex items-center justify-center text-secondary hover:bg-primary hover:text-white transition-all duration-300"
+                >
+                  <span className="text-[10px] font-black uppercase">
+                    {social[0]}
+                  </span>
                 </Link>
               ))}
             </div>
           </div>
 
           <div>
-            <h4 className="text-xs font-black uppercase tracking-[0.2em] text-secondary mb-8">Navigation</h4>
+            <h4 className="text-xs font-black uppercase tracking-[0.2em] text-secondary mb-8">
+              Navigation
+            </h4>
             <ul className="space-y-4">
               <li>
-                <Link href="/restaurants" className="text-sm font-bold text-muted-foreground hover:text-primary transition-colors flex items-center gap-2 group">
+                <Link
+                  href="/restaurants"
+                  className="text-sm font-bold text-muted-foreground hover:text-primary transition-colors flex items-center gap-2 group"
+                >
                   <div className="w-1.5 h-1.5 rounded-full bg-primary scale-0 group-hover:scale-100 transition-transform" />
                   Explore Dining
                 </Link>
               </li>
               <li>
-                <Link href="/about" className="text-sm font-bold text-muted-foreground hover:text-primary transition-colors flex items-center gap-2 group">
+                <Link
+                  href="/about"
+                  className="text-sm font-bold text-muted-foreground hover:text-primary transition-colors flex items-center gap-2 group"
+                >
                   <div className="w-1.5 h-1.5 rounded-full bg-primary scale-0 group-hover:scale-100 transition-transform" />
                   Our Heritage
                 </Link>
               </li>
               <li>
-                <Link href="/register" className="text-sm font-bold text-muted-foreground hover:text-primary transition-colors flex items-center gap-2 group">
+                <Link
+                  href="/register"
+                  className="text-sm font-bold text-muted-foreground hover:text-primary transition-colors flex items-center gap-2 group"
+                >
                   <div className="w-1.5 h-1.5 rounded-full bg-primary scale-0 group-hover:scale-100 transition-transform" />
                   Partner with Us
                 </Link>
@@ -358,22 +468,33 @@ export function Footer() {
           </div>
 
           <div>
-            <h4 className="text-xs font-black uppercase tracking-[0.2em] text-secondary mb-8">Personal</h4>
+            <h4 className="text-xs font-black uppercase tracking-[0.2em] text-secondary mb-8">
+              Personal
+            </h4>
             <ul className="space-y-4">
               <li>
-                <Link href="/dashboard" className="text-sm font-bold text-muted-foreground hover:text-primary transition-colors flex items-center gap-2 group">
+                <Link
+                  href="/dashboard"
+                  className="text-sm font-bold text-muted-foreground hover:text-primary transition-colors flex items-center gap-2 group"
+                >
                   <div className="w-1.5 h-1.5 rounded-full bg-primary scale-0 group-hover:scale-100 transition-transform" />
                   Member Dashboard
                 </Link>
               </li>
               <li>
-                <Link href="/login" className="text-sm font-bold text-muted-foreground hover:text-primary transition-colors flex items-center gap-2 group">
+                <Link
+                  href="/login"
+                  className="text-sm font-bold text-muted-foreground hover:text-primary transition-colors flex items-center gap-2 group"
+                >
                   <div className="w-1.5 h-1.5 rounded-full bg-primary scale-0 group-hover:scale-100 transition-transform" />
                   Account Access
                 </Link>
               </li>
               <li>
-                <Link href="/checkout" className="text-sm font-bold text-muted-foreground hover:text-primary transition-colors flex items-center gap-2 group">
+                <Link
+                  href="/checkout"
+                  className="text-sm font-bold text-muted-foreground hover:text-primary transition-colors flex items-center gap-2 group"
+                >
                   <div className="w-1.5 h-1.5 rounded-full bg-primary scale-0 group-hover:scale-100 transition-transform" />
                   Active Basket
                 </Link>
@@ -382,16 +503,33 @@ export function Footer() {
           </div>
 
           <div>
-            <h4 className="text-xs font-black uppercase tracking-[0.2em] text-secondary mb-8">Legal & Support</h4>
+            <h4 className="text-xs font-black uppercase tracking-[0.2em] text-secondary mb-8">
+              Legal & Support
+            </h4>
             <ul className="space-y-4">
               <li>
-                <Link href="/help" className="text-sm font-bold text-muted-foreground hover:text-primary transition-colors">Help Center</Link>
+                <Link
+                  href="/help"
+                  className="text-sm font-bold text-muted-foreground hover:text-primary transition-colors"
+                >
+                  Help Center
+                </Link>
               </li>
               <li>
-                <Link href="/privacy" className="text-sm font-bold text-muted-foreground hover:text-primary transition-colors">Privacy Concierge</Link>
+                <Link
+                  href="/privacy"
+                  className="text-sm font-bold text-muted-foreground hover:text-primary transition-colors"
+                >
+                  Privacy Concierge
+                </Link>
               </li>
               <li>
-                <Link href="/terms" className="text-sm font-bold text-muted-foreground hover:text-primary transition-colors">Terms of Service</Link>
+                <Link
+                  href="/terms"
+                  className="text-sm font-bold text-muted-foreground hover:text-primary transition-colors"
+                >
+                  Terms of Service
+                </Link>
               </li>
             </ul>
           </div>
@@ -402,8 +540,12 @@ export function Footer() {
             © 2026 ServeSync. Crafted for Excellence.
           </p>
           <div className="flex gap-8">
-            {['Privacy', 'Legal', 'Cookies'].map(item => (
-              <Link key={item} href="#" className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60 hover:text-secondary transition-colors">
+            {["Privacy", "Legal", "Cookies"].map((item) => (
+              <Link
+                key={item}
+                href="#"
+                className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60 hover:text-secondary transition-colors"
+              >
                 {item}
               </Link>
             ))}
@@ -421,9 +563,13 @@ export default function MainLayout({
 }) {
   return (
     <div className="flex flex-col min-h-screen">
+      <SkipNavigation />
       <Navbar />
-      <main className="flex-1 pt-16">{children}</main>
+      <main id="main-content" className="flex-1 pt-16" role="main">
+        {children}
+      </main>
       <Footer />
+      <ToastContainer />
     </div>
   );
 }

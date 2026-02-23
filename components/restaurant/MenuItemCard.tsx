@@ -2,9 +2,8 @@
 
 import { useCartStore } from "@/lib/store";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card } from "@/components/ui/card";
 import { Plus } from "lucide-react";
-import Image from "next/image";
 
 interface MenuItemProps {
   id: string;
@@ -13,6 +12,15 @@ interface MenuItemProps {
   price: number;
   image?: string;
   restaurantId: string;
+  restaurantName?: string;
+  allergens?: string[];
+  nutritionalInfo?: {
+    calories: number;
+    protein: number;
+    carbs: number;
+    fat: number;
+  };
+  isAvailable?: boolean;
 }
 
 export function MenuItemCard({
@@ -22,17 +30,23 @@ export function MenuItemCard({
   price,
   image,
   restaurantId,
+  restaurantName = "",
+  allergens,
+  nutritionalInfo,
+  isAvailable = true,
 }: MenuItemProps) {
   const { addToCart } = useCartStore();
 
   const handleAdd = () => {
     addToCart({
-      id,
+      menuItemId: id,
       name,
       price,
       quantity: 1,
       restaurantId,
+      restaurantName,
       image,
+      isAvailable,
     });
   };
 
@@ -48,10 +62,37 @@ export function MenuItemCard({
           <p className="text-muted-foreground text-sm font-medium line-clamp-2 leading-relaxed opacity-70">
             {description}
           </p>
+
+          {/* Allergens */}
+          {allergens && allergens.length > 0 && (
+            <div className="flex flex-wrap gap-2 pt-2">
+              {allergens.map((allergen) => (
+                <span
+                  key={allergen}
+                  className="px-2 py-1 text-[10px] font-bold uppercase tracking-wider bg-amber-50 text-amber-700 rounded-lg"
+                >
+                  {allergen}
+                </span>
+              ))}
+            </div>
+          )}
+
+          {/* Nutritional Info */}
+          {nutritionalInfo && (
+            <div className="flex gap-4 pt-2 text-[10px] font-bold text-muted-foreground/60">
+              <span>{nutritionalInfo.calories} cal</span>
+              <span>•</span>
+              <span>{nutritionalInfo.protein}g protein</span>
+              <span>•</span>
+              <span>{nutritionalInfo.carbs}g carbs</span>
+            </div>
+          )}
         </div>
         <div className="flex items-center justify-between mt-8">
           <div className="flex flex-col">
-            <span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/40 mb-1">A la carte</span>
+            <span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/40 mb-1">
+              A la carte
+            </span>
             <span className="text-2xl font-heading font-normal text-secondary tabular-nums">
               ${price.toFixed(2)}
             </span>
@@ -59,7 +100,8 @@ export function MenuItemCard({
           <Button
             size="icon"
             onClick={handleAdd}
-            className="rounded-2xl w-14 h-14 shadow-2xl shadow-primary/20 hover:scale-110 active:scale-95 transition-all bg-secondary text-white hover:bg-primary"
+            disabled={!isAvailable}
+            className="rounded-2xl w-14 h-14 shadow-2xl shadow-primary/20 hover:scale-110 active:scale-95 transition-all bg-secondary text-white hover:bg-primary disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <Plus className="w-6 h-6" />
           </Button>

@@ -1,6 +1,8 @@
 import { Outfit, Plus_Jakarta_Sans } from "next/font/google";
 import "./globals.css";
 import { QueryProvider } from "@/lib/react-query-provider";
+import { PerformanceMonitor } from "@/components/PerformanceMonitor";
+import { ErrorBoundary } from "@/components/error";
 import type { Metadata } from "next";
 
 const outfit = Outfit({
@@ -63,7 +65,12 @@ export default function RootLayout({
       <body
         className={`${outfit.variable} ${plusJakarta.variable} font-body text-secondary antialiased`}
       >
-        <QueryProvider>{children}</QueryProvider>
+        <ErrorBoundary level="root">
+          <QueryProvider>
+            <PerformanceMonitor />
+            {children}
+          </QueryProvider>
+        </ErrorBoundary>
       </body>
     </html>
   );

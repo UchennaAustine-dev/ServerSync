@@ -1,11 +1,18 @@
 "use client";
 
 import DashboardLayout from "@/components/layout/DashboardLayout";
+import Image from "next/image";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   Plus,
   Search,
@@ -15,92 +22,177 @@ import {
   EyeOff,
   TrendingUp,
   DollarSign,
+  AlertCircle,
 } from "lucide-react";
-import { useState } from "react";
-
-// Mock menu data
-const mockMenuItems = [
-  {
-    id: "1",
-    name: "Kung Pao Chicken",
-    category: "Main Course",
-    price: 14.5,
-    description: "Spicy stir-fried chicken with peanuts and vegetables",
-    available: true,
-    popular: true,
-  },
-  {
-    id: "2",
-    name: "Fried Rice",
-    category: "Rice & Noodles",
-    price: 8.0,
-    description: "Classic egg fried rice with vegetables",
-    available: true,
-    popular: false,
-  },
-  {
-    id: "3",
-    name: "Spring Rolls",
-    category: "Appetizers",
-    price: 6.5,
-    description: "Crispy vegetable spring rolls (4 pieces)",
-    available: true,
-    popular: true,
-  },
-  {
-    id: "4",
-    name: "Sweet & Sour Pork",
-    category: "Main Course",
-    price: 13.5,
-    description: "Tender pork in tangy sweet and sour sauce",
-    available: false,
-    popular: false,
-  },
-  {
-    id: "5",
-    name: "Wonton Soup",
-    category: "Soups",
-    price: 7.0,
-    description: "Homemade wontons in clear broth",
-    available: true,
-    popular: false,
-  },
-  {
-    id: "6",
-    name: "General Tso's Chicken",
-    category: "Main Course",
-    price: 15.0,
-    description: "Crispy chicken in spicy-sweet sauce",
-    available: true,
-    popular: true,
-  },
-];
+import { useState, useMemo } from "react";
+import { useAuthStore } from "@/lib/store/auth.store";
+import {
+  useRestaurantMenu,
+  useCreateMenuItem,
+  useUpdateMenuItem,
+  useDeleteMenuItem,
+  useUploadMenuItemImage,
+} from "@/lib/hooks/restaurant.hooks";
+import { MenuItemForm } from "@/components/restaurant/MenuItemForm";
+import { DeleteMenuItemDialog } from "@/components/restaurant/DeleteMenuItemDialog";
+import type { MenuItem, CreateMenuItemRequest } from "@/lib/api/types";
+import { toast } from "@/lib/utils/toast";
 
 export default function MenuManagementPage() {
+  const { user } = useAuthStore();
+  const restaurantId = user?.restaurantId || "";
+
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("all");
+  const [isCreateOpen, setIsCreateOpen] = useState(false);
+  const [editingItem, setEditingItem] = useState<MenuItem | null>(null);
+  const [deletingItem, setDeletingItem] = useState<MenuItem | null>(null);
 
-  const categories = [
-    "all",
-    ...Array.from(new Set(mockMenuItems.map((item) => item.category))),
-  ];
+  // Fetch menu data
+  const { data: menuData, isLoading, error } = useRestaurantMenu(restaurantId);
 
-  const filteredItems = mockMenuItems.filter((item) => {
-    const matchesSearch = item.name
-      .toLowerCase()
-      .includes(searchQuery.toLowerCase());
-    const matchesCategory =
-      selectedCategory === "all" || item.category === selectedCategory;
-    return matchesSearch && matchesCategory;
-  });
+  // Mutations
+  const createMutation = useCreateMenuItem(restaurantId);
+  const updateMutation = useUpdateMenuItem(restaurantId);
+  const deleteMutation = useDeleteMenuItem(restaurantId);
+  const uploadImageMutation = useUploadMenuItemImage(restaurantId);
 
-  const stats = {
-    totalItems: mockMenuItems.length,
-    available: mockMenuItems.filter((i) => i.available).length,
-    popular: mockMenuItems.filter((i) => i.popular).length,
-    avgPrice:
-      mockMenuItems.reduce((sum, i) => sum + i.price, 0) / mockMenuItems.length,
+  const menuItems = menuData?.items || [];
+  const categories = useMemo(() => {
+    return ["all", ...(menuData?.categories || [])];
+  }, [menuData?.categories]);
+
+  const filteredItems = useMemo(() => {
+    return menuItems.filter((item) => {
+      const matchesSearch = item.name
+        .toLowerCase()
+        .includes(searchQuery.toLowerCase());
+      const matchesCategory =
+        selectedCategory === "all" || item.category === selectedCategory;
+      return matchesSearch && matchesCategory;
+    });
+  }, [menuItems, searchQuery, selectedCategory]);
+
+  const stats = useMemo(() => {
+    return {
+      totalItems: menuItems.length,
+      available: menuItems.filter((i) => i.isAvailable).length,
+      unavailable: menuItems.filter((i) => !i.isAvailable).length,
+      avgPrice:
+        menuItems.length > 0
+          ? menuItems.reduce((sum, i) => sum + i.price, 0) / menuItems.length
+          : 0,
+    };
+  }, [menuItems]);
+
+  // Handlers
+  const handleCreateItem = async (
+    data: CreateMenuItemRequest,
+    imageFile?: File,
+  ) => {
+    try {
+      const newItem = await createMutation.mutateAsync(data);
+
+      // Upload image if provided
+      if (imageFile && newItem.id) {
+        try {
+          await uploadImageMutation.mutateAsync({
+            itemId: newItem.id,
+            file: imageFile,
+          });
+          toast.success("Menu item created with image successfully");
+        } catch (imageError) {
+          toast.warning(
+            "Menu item created but image upload failed. You can add it later.",
+          );
+        }
+      } else {
+        toast.success("Menu item created successfully");
+      }
+
+      setIsCreateOpen(false);
+    } catch (error) {
+      toast.error("Failed to create menu item");
+    }
   };
+
+  const handleUpdateItem = async (
+    data: CreateMenuItemRequest,
+    imageFile?: File,
+  ) => {
+    if (!editingItem) return;
+
+    try {
+      await updateMutation.mutateAsync({
+        itemId: editingItem.id,
+        data,
+      });
+
+      // Upload image if provided
+      if (imageFile) {
+        try {
+          await uploadImageMutation.mutateAsync({
+            itemId: editingItem.id,
+            file: imageFile,
+          });
+          toast.success("Menu item updated with image successfully");
+        } catch (imageError) {
+          toast.warning(
+            "Menu item updated but image upload failed. Please try again.",
+          );
+        }
+      } else {
+        toast.success("Menu item updated successfully");
+      }
+
+      setEditingItem(null);
+    } catch (error) {
+      toast.error("Failed to update menu item");
+    }
+  };
+
+  const handleToggleAvailability = async (item: MenuItem) => {
+    try {
+      await updateMutation.mutateAsync({
+        itemId: item.id,
+        data: { isAvailable: !item.isAvailable },
+      });
+      toast.success(
+        `Item marked as ${!item.isAvailable ? "available" : "unavailable"}`,
+      );
+    } catch (error) {
+      // Error toast is shown, optimistic update is automatically rolled back
+      toast.error("Failed to update availability");
+    }
+  };
+
+  const handleDeleteItem = async () => {
+    if (!deletingItem) return;
+
+    try {
+      await deleteMutation.mutateAsync(deletingItem.id);
+      toast.success("Menu item deleted successfully");
+      setDeletingItem(null);
+    } catch (error) {
+      toast.error("Failed to delete menu item");
+    }
+  };
+
+  if (!restaurantId) {
+    return (
+      <DashboardLayout>
+        <Card className="p-12 text-center">
+          <AlertCircle className="w-12 h-12 text-destructive mx-auto mb-4" />
+          <h3 className="font-heading font-semibold text-lg mb-2">
+            No Restaurant Found
+          </h3>
+          <p className="text-muted-foreground">
+            You need to be associated with a restaurant to manage menu items.
+          </p>
+        </Card>
+      </DashboardLayout>
+    );
+  }
 
   return (
     <DashboardLayout>
@@ -114,7 +206,7 @@ export default function MenuManagementPage() {
               Manage your restaurant's menu items
             </p>
           </div>
-          <Button>
+          <Button onClick={() => setIsCreateOpen(true)} disabled={isLoading}>
             <Plus className="w-4 h-4 mr-2" />
             Add Item
           </Button>
@@ -122,58 +214,87 @@ export default function MenuManagementPage() {
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-        <Card className="p-4">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-lg bg-blue-50 flex items-center justify-center">
-              <span className="text-xl">🍽️</span>
+      {isLoading ? (
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+          {[...Array(4)].map((_, i) => (
+            <Card key={i} className="p-4">
+              <Skeleton className="h-20" />
+            </Card>
+          ))}
+        </div>
+      ) : (
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+          <Card className="p-4">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-lg bg-blue-50 flex items-center justify-center">
+                <span className="text-xl">🍽️</span>
+              </div>
+              <div>
+                <p className="text-2xl font-heading font-bold">
+                  {stats.totalItems}
+                </p>
+                <p className="text-xs text-muted-foreground">Total Items</p>
+              </div>
             </div>
+          </Card>
+          <Card className="p-4">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-lg bg-green-50 flex items-center justify-center">
+                <Eye className="w-5 h-5 text-green-600" />
+              </div>
+              <div>
+                <p className="text-2xl font-heading font-bold">
+                  {stats.available}
+                </p>
+                <p className="text-xs text-muted-foreground">Available</p>
+              </div>
+            </div>
+          </Card>
+          <Card className="p-4">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-lg bg-orange-50 flex items-center justify-center">
+                <EyeOff className="w-5 h-5 text-orange-600" />
+              </div>
+              <div>
+                <p className="text-2xl font-heading font-bold">
+                  {stats.unavailable}
+                </p>
+                <p className="text-xs text-muted-foreground">Unavailable</p>
+              </div>
+            </div>
+          </Card>
+          <Card className="p-4">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
+                <DollarSign className="w-5 h-5 text-primary" />
+              </div>
+              <div>
+                <p className="text-2xl font-heading font-bold">
+                  ${stats.avgPrice.toFixed(2)}
+                </p>
+                <p className="text-xs text-muted-foreground">Avg Price</p>
+              </div>
+            </div>
+          </Card>
+        </div>
+      )}
+
+      {/* Error State */}
+      {error && (
+        <Card className="p-6 mb-6 border-destructive">
+          <div className="flex items-center gap-3">
+            <AlertCircle className="w-5 h-5 text-destructive" />
             <div>
-              <p className="text-2xl font-heading font-bold">
-                {stats.totalItems}
+              <h3 className="font-semibold text-destructive">
+                Failed to load menu
+              </h3>
+              <p className="text-sm text-muted-foreground">
+                {error instanceof Error ? error.message : "An error occurred"}
               </p>
-              <p className="text-xs text-muted-foreground">Total Items</p>
             </div>
           </div>
         </Card>
-        <Card className="p-4">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-lg bg-green-50 flex items-center justify-center">
-              <Eye className="w-5 h-5 text-green-600" />
-            </div>
-            <div>
-              <p className="text-2xl font-heading font-bold">
-                {stats.available}
-              </p>
-              <p className="text-xs text-muted-foreground">Available</p>
-            </div>
-          </div>
-        </Card>
-        <Card className="p-4">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-lg bg-orange-50 flex items-center justify-center">
-              <TrendingUp className="w-5 h-5 text-orange-600" />
-            </div>
-            <div>
-              <p className="text-2xl font-heading font-bold">{stats.popular}</p>
-              <p className="text-xs text-muted-foreground">Popular Items</p>
-            </div>
-          </div>
-        </Card>
-        <Card className="p-4">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
-              <DollarSign className="w-5 h-5 text-primary" />
-            </div>
-            <div>
-              <p className="text-2xl font-heading font-bold">
-                ${stats.avgPrice.toFixed(2)}
-              </p>
-              <p className="text-xs text-muted-foreground">Avg Price</p>
-            </div>
-          </div>
-        </Card>
-      </div>
+      )}
 
       {/* Filters */}
       <div className="flex flex-col sm:flex-row gap-4 mb-6">
@@ -184,6 +305,7 @@ export default function MenuManagementPage() {
             className="pl-10"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
+            disabled={isLoading}
           />
         </div>
         <div className="flex gap-2 overflow-x-auto pb-2">
@@ -194,6 +316,7 @@ export default function MenuManagementPage() {
               size="sm"
               onClick={() => setSelectedCategory(category)}
               className="shrink-0"
+              disabled={isLoading}
             >
               {category === "all" ? "All" : category}
             </Button>
@@ -202,109 +325,199 @@ export default function MenuManagementPage() {
       </div>
 
       {/* Menu Items */}
-      <div className="space-y-3">
-        {filteredItems.map((item) => (
-          <Card key={item.id} className="p-5 hover:shadow-md transition-shadow">
-            <div className="flex items-start gap-4">
-              <div className="w-20 h-20 rounded-xl bg-linear-to-br from-orange-50 to-rose-50 flex items-center justify-center text-3xl shrink-0">
-                🍜
-              </div>
+      {isLoading ? (
+        <div className="space-y-3">
+          {[...Array(3)].map((_, i) => (
+            <Card key={i} className="p-5">
+              <Skeleton className="h-24" />
+            </Card>
+          ))}
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {filteredItems.map((item) => (
+            <Card
+              key={item.id}
+              className="p-5 hover:shadow-md transition-shadow"
+            >
+              <div className="flex items-start gap-4">
+                {item.image ? (
+                  <div className="relative w-20 h-20 rounded-xl overflow-hidden shrink-0">
+                    <Image
+                      src={item.image}
+                      alt={item.name}
+                      fill
+                      className="object-cover"
+                      sizes="80px"
+                    />
+                  </div>
+                ) : (
+                  <div className="w-20 h-20 rounded-xl bg-linear-to-br from-orange-50 to-rose-50 flex items-center justify-center text-3xl shrink-0">
+                    🍜
+                  </div>
+                )}
 
-              <div className="flex-1 min-w-0">
-                <div className="flex items-start justify-between gap-4 mb-2">
-                  <div>
-                    <div className="flex items-center gap-2 mb-1">
-                      <h3 className="font-heading font-semibold text-lg">
-                        {item.name}
-                      </h3>
-                      {item.popular && (
-                        <Badge className="bg-orange-50 text-orange-700 border-orange-200">
-                          Popular
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-start justify-between gap-4 mb-2">
+                    <div>
+                      <div className="flex items-center gap-2 mb-1">
+                        <h3 className="font-heading font-semibold text-lg">
+                          {item.name}
+                        </h3>
+                      </div>
+                      <p className="text-sm text-muted-foreground mb-1">
+                        {item.description}
+                      </p>
+                      <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                        <Badge variant="outline" className="font-normal">
+                          {item.category}
                         </Badge>
-                      )}
+                        <span>•</span>
+                        <span
+                          className={
+                            item.isAvailable ? "text-green-600" : "text-red-600"
+                          }
+                        >
+                          {item.isAvailable ? "Available" : "Unavailable"}
+                        </span>
+                        {item.allergens && item.allergens.length > 0 && (
+                          <>
+                            <span>•</span>
+                            <span>Allergens: {item.allergens.join(", ")}</span>
+                          </>
+                        )}
+                      </div>
                     </div>
-                    <p className="text-sm text-muted-foreground mb-1">
-                      {item.description}
-                    </p>
-                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                      <Badge variant="outline" className="font-normal">
-                        {item.category}
-                      </Badge>
-                      <span>•</span>
-                      <span
-                        className={
-                          item.available ? "text-green-600" : "text-red-600"
-                        }
-                      >
-                        {item.available ? "Available" : "Unavailable"}
-                      </span>
+                    <div className="text-right shrink-0">
+                      <p className="text-lg font-heading font-bold text-primary">
+                        ${item.price.toFixed(2)}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        {item.preparationTime} min
+                      </p>
                     </div>
                   </div>
-                  <div className="text-right shrink-0">
-                    <p className="text-lg font-heading font-bold text-primary">
-                      ${item.price.toFixed(2)}
-                    </p>
-                  </div>
-                </div>
 
-                <div className="flex items-center gap-2 mt-4">
-                  <Button size="sm" variant="outline">
-                    <Edit className="w-3 h-3 mr-2" />
-                    Edit
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className={
-                      item.available
-                        ? ""
-                        : "border-green-200 text-green-700 hover:bg-green-50"
-                    }
-                  >
-                    {item.available ? (
-                      <>
-                        <EyeOff className="w-3 h-3 mr-2" />
-                        Mark Unavailable
-                      </>
-                    ) : (
-                      <>
-                        <Eye className="w-3 h-3 mr-2" />
-                        Mark Available
-                      </>
-                    )}
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    className="text-red-600 hover:text-red-700 hover:bg-red-50"
-                  >
-                    <Trash2 className="w-3 h-3 mr-2" />
-                    Delete
-                  </Button>
+                  <div className="flex items-center gap-2 mt-4">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setEditingItem(item)}
+                      disabled={updateMutation.isPending}
+                    >
+                      <Edit className="w-3 h-3 mr-2" />
+                      Edit
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className={
+                        item.isAvailable
+                          ? ""
+                          : "border-green-200 text-green-700 hover:bg-green-50"
+                      }
+                      onClick={() => handleToggleAvailability(item)}
+                      disabled={updateMutation.isPending}
+                    >
+                      {item.isAvailable ? (
+                        <>
+                          <EyeOff className="w-3 h-3 mr-2" />
+                          Mark Unavailable
+                        </>
+                      ) : (
+                        <>
+                          <Eye className="w-3 h-3 mr-2" />
+                          Mark Available
+                        </>
+                      )}
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                      onClick={() => setDeletingItem(item)}
+                      disabled={deleteMutation.isPending}
+                    >
+                      <Trash2 className="w-3 h-3 mr-2" />
+                      Delete
+                    </Button>
+                  </div>
                 </div>
               </div>
-            </div>
-          </Card>
-        ))}
+            </Card>
+          ))}
 
-        {filteredItems.length === 0 && (
-          <Card className="p-12 text-center">
-            <span className="text-6xl mb-4 block">🍽️</span>
-            <h3 className="font-heading font-semibold text-lg mb-2">
-              No items found
-            </h3>
-            <p className="text-muted-foreground mb-6">
-              {searchQuery
-                ? "Try adjusting your search"
-                : "Start by adding items to your menu"}
-            </p>
-            <Button>
-              <Plus className="w-4 h-4 mr-2" />
-              Add First Item
-            </Button>
-          </Card>
-        )}
-      </div>
+          {filteredItems.length === 0 && !isLoading && (
+            <Card className="p-12 text-center">
+              <span className="text-6xl mb-4 block">🍽️</span>
+              <h3 className="font-heading font-semibold text-lg mb-2">
+                No items found
+              </h3>
+              <p className="text-muted-foreground mb-6">
+                {searchQuery
+                  ? "Try adjusting your search"
+                  : "Start by adding items to your menu"}
+              </p>
+              <Button onClick={() => setIsCreateOpen(true)}>
+                <Plus className="w-4 h-4 mr-2" />
+                Add First Item
+              </Button>
+            </Card>
+          )}
+        </div>
+      )}
+
+      {/* Create Menu Item Sheet */}
+      <Sheet open={isCreateOpen} onOpenChange={setIsCreateOpen}>
+        <SheetContent
+          side="right"
+          className="w-full sm:max-w-lg overflow-y-auto"
+        >
+          <SheetHeader>
+            <SheetTitle>Add Menu Item</SheetTitle>
+          </SheetHeader>
+          <div className="mt-6">
+            <MenuItemForm
+              onSubmit={handleCreateItem}
+              onCancel={() => setIsCreateOpen(false)}
+              isLoading={createMutation.isPending}
+            />
+          </div>
+        </SheetContent>
+      </Sheet>
+
+      {/* Edit Menu Item Sheet */}
+      <Sheet open={!!editingItem} onOpenChange={() => setEditingItem(null)}>
+        <SheetContent
+          side="right"
+          className="w-full sm:max-w-lg overflow-y-auto"
+        >
+          <SheetHeader>
+            <SheetTitle>Edit Menu Item</SheetTitle>
+          </SheetHeader>
+          <div className="mt-6">
+            {editingItem && (
+              <MenuItemForm
+                initialData={editingItem}
+                onSubmit={handleUpdateItem}
+                onCancel={() => setEditingItem(null)}
+                isLoading={updateMutation.isPending}
+              />
+            )}
+          </div>
+        </SheetContent>
+      </Sheet>
+
+      {/* Delete Confirmation Dialog */}
+      {deletingItem && (
+        <DeleteMenuItemDialog
+          isOpen={!!deletingItem}
+          onClose={() => setDeletingItem(null)}
+          onConfirm={handleDeleteItem}
+          itemName={deletingItem.name}
+          isLoading={deleteMutation.isPending}
+        />
+      )}
     </DashboardLayout>
   );
 }

@@ -4,6 +4,8 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useAuthStore } from "@/lib/store";
+import { useLogout } from "@/lib/hooks/auth.hooks";
+import type { UserRole } from "@/lib/api/types/auth.types";
 import {
   LayoutDashboard,
   UtensilsCrossed,
@@ -13,6 +15,10 @@ import {
   UserCircle,
   Menu,
   ChevronRight,
+  Store,
+  Users,
+  DollarSign,
+  TrendingUp,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
@@ -20,14 +26,14 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 
 interface SidebarProps {
-  role: "CUSTOMER" | "KITCHEN" | "ADMIN";
+  role: UserRole;
   isMobile?: boolean;
   onClose?: () => void;
 }
 
 function Sidebar({ role, isMobile, onClose }: SidebarProps) {
   const pathname = usePathname();
-  const { logout } = useAuthStore();
+  const logout = useLogout();
 
   const customerLinks = [
     { icon: LayoutDashboard, label: "Overview", href: "/dashboard" },
@@ -51,18 +57,27 @@ function Sidebar({ role, isMobile, onClose }: SidebarProps) {
 
   const adminLinks = [
     { icon: LayoutDashboard, label: "Admin Overview", href: "/admin" },
+    { icon: Store, label: "Restaurants", href: "/admin/restaurants" },
+    { icon: Users, label: "Drivers", href: "/admin/drivers" },
+    { icon: ShoppingBag, label: "Orders", href: "/admin/orders" },
+    { icon: DollarSign, label: "Revenue Analytics", href: "/admin/revenue" },
+    {
+      icon: TrendingUp,
+      label: "Driver Performance",
+      href: "/admin/drivers-performance",
+    },
     { icon: Settings, label: "System Settings", href: "/admin/settings" },
   ];
 
   const links =
-    role === "KITCHEN"
+    role === "KITCHEN_STAFF" || role === "RESTAURANT_OWNER"
       ? kitchenLinks
       : role === "ADMIN"
         ? adminLinks
         : customerLinks;
 
   const handleLogout = () => {
-    logout();
+    logout.mutate();
     // Redirect handled by component usage or global effect
   };
 
@@ -181,13 +196,14 @@ export default function DashboardLayout({
                 <h1 className="text-2xl font-bold font-heading">
                   {role === "CUSTOMER" &&
                     `Welcome back, ${user?.name || "User"}!`}
-                  {role === "KITCHEN" && "Kitchen Dashboard"}
+                  {(role === "KITCHEN_STAFF" || role === "RESTAURANT_OWNER") &&
+                    "Kitchen Dashboard"}
                   {role === "ADMIN" && "Admin Portal"}
                 </h1>
                 <p className="text-muted-foreground text-sm">
                   {role === "CUSTOMER" &&
                     "Here's what's happening with your orders today."}
-                  {role === "KITCHEN" &&
+                  {(role === "KITCHEN_STAFF" || role === "RESTAURANT_OWNER") &&
                     "Manage your menu and track live orders."}
                 </p>
               </div>
